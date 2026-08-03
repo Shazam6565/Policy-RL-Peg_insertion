@@ -1,0 +1,9 @@
+# Claude Code / tooling artifacts (not project content)
+logs/
+
+# OS / editor
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
