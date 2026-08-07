@@ -1,10 +1,13 @@
-# Note: These files are kept for development purposes only.
+# Ignore all other files
+.python.env
+*.json
+
+# Note: these are kept for development purposes only. Gitignore uses
+# last-match-wins, so these negations must come AFTER the blanket "*.json"
+# above — listed before it (as originally generated), they were silently
+# overridden and every file here was excluded regardless.
 !tools/launch.template.json
 !tools/settings.template.json
 !tools/setup_vscode.py
 !extensions.json
 !tasks.json
-
-# Ignore all other files
-.python.env
-*.json

@@ -29,10 +29,11 @@ docker/.container.cfg
 
 # IDE
 **/.idea/
-**/.vscode/
-# Don't ignore the top-level .vscode directory as it is
-# used to configure VS Code settings
-!.vscode
+# Ignore nested .vscode dirs only — a bare "**/.vscode/" + "!.vscode" negation
+# does not work (git can't re-include files under an excluded directory), so
+# it silently swallowed the top-level .vscode too. This pattern requires at
+# least one path segment before .vscode, which never matches root.
+**/*/.vscode/
 
 # Outputs
 **/output/*
@@ -82,6 +83,8 @@ _build
 
 # Dev-time files, generated stuff
 **/__*
+# ...but never __init__.py — that's real package code, not a dev artifact.
+!**/__init__.py
 
 # Isaac Lab CI environments in native mode
 **/_isaaclab_install_ci_*
