@@ -65,6 +65,81 @@ watching a set of shots — small corrections each round, never a total overhaul
 
 ---
 
+## 3.5 The network is one component, not the whole system
+
+Easy to conflate "the neural network" with "the training process." They're not the same thing —
+the network's entire job is `observation in → action out`. Everything else (simulating physics,
+computing reward, deciding resets, collecting batches, running gradient descent) is separate
+machinery around it:
+
+```mermaid
+flowchart TB
+    subgraph ENV["Environment — Isaac Sim + ForgeEnv (NOT a neural net)"]
+        R2["Reset: randomize peg/socket pose, friction, mass"]
+        P2["Physics step: robot moves, maybe contacts socket"]
+        RW2["Compute reward terms + check timeout"]
+    end
+    subgraph BRAIN["The neural network — ONE component"]
+        O2["Observation vector (24 numbers)"]
+        N2["Actor network"]
+        S2["Sample an action from the network's output distribution"]
+    end
+    subgraph LEARN["PPO update loop — also NOT the network itself"]
+        B2["Collect batch: 128 steps × num_envs of (obs, action, reward)"]
+        G2["Compute advantage → gradient descent on network weights"]
+    end
+
+    R2 --> O2 --> N2 --> S2 --> P2 --> RW2
+    RW2 -->|episode continues| R2
+    RW2 --> B2
+    B2 -->|every 128 steps, per env| G2
+    G2 -->|updated weights loaded back in| N2
+```
+
+### The network's actual shape (real numbers, from `tasks/direct/forge/agents/rl_games_ppo_cfg.yaml`)
+
+```mermaid
+flowchart LR
+    subgraph ACTOR["Actor network — decides the action"]
+        POBS["Policy observation\n24 numbers\n(fingertip_pos_rel_fixed, quat,\nee_linvel, ee_angvel, ft_force,\nforce_threshold, prev_action)"]
+        LSTM1["LSTM\n1024 units × 2 layers\n(has memory across steps)"]
+        MLP1["MLP: 512 → 128 → 64\nactivation: ELU"]
+        MU["mu head → 7 numbers\n(mean of each action dim)"]
+        SIG["sigma → 7 numbers\n(learned std, not input-dependent)"]
+        DIST["Gaussian distribution,\none per action dimension"]
+        ACT["Sampled action\n7 numbers, clipped to [-1, 1]"]
+        POBS --> LSTM1 --> MLP1
+        MLP1 --> MU --> DIST
+        MLP1 --> SIG --> DIST
+        DIST --> ACT
+    end
+
+    subgraph CRITIC["Separate critic network — judges the state (asymmetric)"]
+        SOBS["Privileged 'state' observation\n61 numbers — includes exact\njoint_pos, held_pos, fixed_pos,\ntask_prop_gains: things a real\nsensor wouldn't hand you exactly"]
+        LSTM2["LSTM\n1024 units × 2 layers"]
+        MLP2["MLP: 512 → 128 → 64\nELU"]
+        VAL["value head → 1 number\n(estimated future reward)"]
+        SOBS --> LSTM2 --> MLP2 --> VAL
+    end
+```
+
+Worth noting, straight from the config/code (not generic RL trivia):
+- **Not a plain MLP** — an LSTM (1024 units × 2 layers) runs before the MLP, giving the policy
+  short-term memory across steps. Useful for a contact task, where "what the force reading just
+  did" matters, not only its current value.
+- **Actor and critic see different inputs.** This is the `"policy"` vs `"critic"` dict split from
+  `_get_observations()` (§ code walkthrough in `reference/isaaclab_source/README.md`) — the actor
+  only gets the 24-number observation a real robot could plausibly sense; the critic gets a richer
+  61-number "state" with privileged, simulator-only ground truth. This is **asymmetric
+  actor-critic**: since we're in simulation and know the true state, the critic is allowed to cheat
+  for a cleaner learning signal, while the actor stays honest about what it's allowed to see.
+- **Hyperparameters governing the "PPO update" box**: `horizon_length: 128` (steps collected per
+  env before an update), `mini_epochs: 4` (passes over that batch), `learning_rate: 1e-4`,
+  `gamma: 0.995` (how much future reward matters), `e_clip: 0.2` (the "proximal" clipping described
+  above).
+
+---
+
 ## 4. The training loop, step by step
 
 ```mermaid

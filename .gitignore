@@ -1,6 +1,9 @@
 # Claude Code / tooling artifacts (not project content)
 logs/
 
+# Personal scratch notes, not part of the tracked project docs
+/scratchpad/
+
 # OS / editor
 .DS_Store
 
