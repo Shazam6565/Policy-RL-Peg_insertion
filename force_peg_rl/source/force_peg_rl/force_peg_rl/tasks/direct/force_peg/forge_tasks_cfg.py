@@ -16,6 +16,9 @@ class ForgeTask(FactoryTask):
     contact_penalty_scale: float = 0.05
     delay_until_ratio: float = 0.25
     contact_penalty_threshold_range = [5.0, 10.0]
+    # Hard force limit for early termination (§9.6) — distinct from the soft
+    # contact_penalty_threshold_range used only for reward shaping.
+    force_limit_threshold: float = 50.0
 
 
 @configclass

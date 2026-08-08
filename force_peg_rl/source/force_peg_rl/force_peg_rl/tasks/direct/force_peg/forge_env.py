@@ -60,6 +60,23 @@ class ForgeEnv(FactoryEnv):
         self.pos_threshold = self.default_pos_threshold.clone()
         self.rot_threshold = self.default_rot_threshold.clone()
 
+        # Per-episode accumulators for evaluation (§11.4 episode-level logging schema).
+        # Computed here rather than read back from outside because DirectRLEnv.step()
+        # resets terminated envs' pose data before returning control to the caller —
+        # by the time an external eval script sees post-step state, the episode that
+        # just ended has already been overwritten by the next one.
+        self.ep_max_contact_force = torch.zeros(self.num_envs, device=self.device)
+        self.ep_sum_contact_force = torch.zeros(self.num_envs, device=self.device)
+        self.ep_force_above_threshold_steps = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
+        self.ep_step_count = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
+        self.ep_initial_xy_offset = torch.zeros(self.num_envs, device=self.device)
+        self.ep_initial_orientation_error = torch.zeros(self.num_envs, device=self.device)
+        # Sticky within an episode — see _get_dones(). Deliberately NOT named
+        # ep_succeeded: the base FactoryEnv already owns that as a long buffer for
+        # success-time logging (factory_env.py:81) and resets it itself.
+        self.ep_success_latched = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+        self.ep_force_limit_hit = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+
     def _compute_intermediate_values(self, dt):
         """Add noise to observations for force sensing."""
         super()._compute_intermediate_values(dt)
@@ -231,6 +248,95 @@ class ForgeEnv(FactoryEnv):
             ctrl_target_gripper_dof_pos=0.0,
         )
 
+    def _get_dones(self):
+        """Label per-env termination reason (§9.6); resets stay synchronized (timeout-only).
+
+        §9.6 literally specifies early termination on success/drop/force-limit/etc, but
+        FactoryEnv.randomize_initial_state() (external isaaclab_tasks package) hard-codes
+        the assumption that every reset call covers ALL envs — it's ~200 lines of
+        un-indexed self.num_envs-shaped tensors and un-indexed write_root_pose_to_sim_index
+        calls, confirmed by a real crash (tensor size 64 vs 63) when a genuine per-env
+        `terminated` was returned. Re-implementing that method correctly in our fork would
+        mean forking ~200 lines of upstream physics/IK logic with no relation to this
+        change. Documented, deliberate deviation (see docs/experiment_log.md): keep
+        `terminated` all-false so every reset stays batch-synchronized (upstream dynamics
+        unchanged), but still compute and log a real per-env termination_reason every step
+        for evaluation — success/timeout/force_limit signals are genuine, just observed
+        rather than used to end the episode.
+
+        peg_dropped/workspace_violation/joint_limit/jammed are not implemented — no
+        existing signal or documented threshold for them exists on this fork, so they
+        fall through to "other" rather than guessing at physical bounds.
+        """
+        self._compute_intermediate_values(dt=self.physics_dt)
+
+        time_out = self.episode_length_buf >= self.max_episode_length - 1
+
+        check_rot = self.cfg_task.name == "nut_thread"
+        succeeded = self._get_curr_successes(success_threshold=self.cfg_task.success_threshold, check_rot=check_rot)
+
+        contact_force = torch.linalg.norm(self.force_sensor_smooth[:, 0:3], ord=2, dim=-1, keepdim=False)
+        force_limit_exceeded = contact_force >= self.cfg_task.force_limit_threshold
+
+        # Sticky per-episode flags: because resets are synchronized on time_out only
+        # (see docstring), a success or force-limit event at step 50 must still be
+        # visible in the label when the episode actually ends at the timeout. Without
+        # latching, a peg that seated at step 50 and drifted by step 149 would be
+        # labelled "timeout", losing the success.
+        self.ep_success_latched |= succeeded
+        self.ep_force_limit_hit |= force_limit_exceeded
+
+        self.termination_reason = np.full(self.num_envs, "timeout", dtype=object)
+        self.termination_reason[self.ep_force_limit_hit.cpu().numpy()] = "force_limit"
+        self.termination_reason[self.ep_success_latched.cpu().numpy()] = "success"  # highest priority
+        self.extras["termination_reason"] = self.termination_reason.copy()
+
+        # Per-episode accumulators for the evaluation CSV schema (§11.4). Must be
+        # updated and read out here, before _reset_idx() overwrites pose/force state
+        # for any env whose episode is ending this step.
+        # NOTE: all updates here are in-place (torch.maximum(..., out=) rather than
+        # rebinding). Rebinding inside torch.inference_mode() — which is how the eval
+        # script drives stepping — would replace these with inference tensors, and the
+        # in-place reset in _reset_idx() then fails outside that context with
+        # "Inplace update to inference tensor outside InferenceMode is not allowed".
+        self.ep_step_count += 1
+        torch.maximum(self.ep_max_contact_force, contact_force, out=self.ep_max_contact_force)
+        self.ep_sum_contact_force += contact_force
+        self.ep_force_above_threshold_steps += (contact_force >= self.contact_penalty_thresholds).long()
+
+        held_base_pos, _ = factory_utils.get_held_base_pose(
+            self.held_pos, self.held_quat, self.cfg_task.name, self.cfg_task.fixed_asset_cfg, self.num_envs, self.device
+        )
+        target_held_base_pos, _ = factory_utils.get_target_held_base_pose(
+            self.fixed_pos, self.fixed_quat, self.cfg_task.name, self.cfg_task.fixed_asset_cfg, self.num_envs, self.device
+        )
+        lateral_error = torch.linalg.vector_norm(target_held_base_pos[:, 0:2] - held_base_pos[:, 0:2], dim=1)
+        insertion_depth = held_base_pos[:, 2] - target_held_base_pos[:, 2]
+        _, _, curr_yaw = euler_xyz_from_quat(self.fingertip_midpoint_quat)
+        orientation_error = factory_utils.wrap_yaw(curr_yaw)
+
+        # An episode has genuinely ENDED only on time_out — `terminated` is always
+        # false here, so DirectRLEnv.step() resets on time_out alone. Including
+        # succeeded/force_limit_exceeded would flag envs that are still running and
+        # keep flagging them every subsequent step, so an evaluation script consuming
+        # this would write many duplicate rows for a single episode.
+        any_done = time_out
+        self.extras["eval/episode_steps"] = self.ep_step_count.clone()
+        self.extras["eval/max_contact_force"] = self.ep_max_contact_force.clone()
+        self.extras["eval/mean_contact_force"] = self.ep_sum_contact_force / self.ep_step_count.clamp(min=1)
+        self.extras["eval/force_above_threshold_duration"] = (
+            self.ep_force_above_threshold_steps.float() * self.physics_dt
+        )
+        self.extras["eval/lateral_error_final"] = lateral_error
+        self.extras["eval/insertion_depth_final"] = insertion_depth
+        self.extras["eval/orientation_error_final"] = orientation_error
+        self.extras["eval/initial_xy_offset"] = self.ep_initial_xy_offset.clone()
+        self.extras["eval/initial_orientation_error"] = self.ep_initial_orientation_error.clone()
+        self.extras["eval/any_done"] = any_done
+
+        terminated = torch.zeros_like(time_out)
+        return terminated, time_out
+
     def _get_rewards(self):
         """FORGE reward includes a contact penalty and success prediction error."""
         # Use same base rewards as Factory.
@@ -242,7 +348,12 @@ class ForgeEnv(FactoryEnv):
         rot_error = torch.abs(self.delta_yaw) / self.cfg.ctrl.rot_action_threshold[0]
         # Contact penalty.
         contact_force = torch.linalg.norm(self.force_sensor_smooth[:, 0:3], ord=2, dim=-1, keepdim=False)
-        contact_penalty = torch.nn.functional.relu(contact_force - self.contact_penalty_thresholds)
+        if self.cfg.use_force_penalty:
+            contact_penalty = torch.nn.functional.relu(contact_force - self.contact_penalty_thresholds)
+        else:
+            # Zero the raw term (not just its scale) so logs_rew_contact_penalty logs flat/zero —
+            # proof the ablation removed the signal, not just its weight in rew_buf.
+            contact_penalty = torch.zeros_like(contact_force)
         # Add success prediction rewards.
         check_rot = self.cfg_task.name == "nut_thread"
         true_successes = self._get_curr_successes(
@@ -274,6 +385,35 @@ class ForgeEnv(FactoryEnv):
     def _reset_idx(self, env_ids):
         """Perform additional randomizations."""
         super()._reset_idx(env_ids)
+
+        # Reset per-episode evaluation accumulators (see _get_dones()) for the envs
+        # actually being reset — NOTE: because our _get_dones() keeps `terminated`
+        # all-false (see its docstring), env_ids here only ever contains timed-out
+        # envs, so this reset happens in sync with the values already having been
+        # read out via self.extras["eval/*"] the same step.
+        self.ep_max_contact_force[env_ids] = 0.0
+        self.ep_sum_contact_force[env_ids] = 0.0
+        self.ep_force_above_threshold_steps[env_ids] = 0
+        self.ep_step_count[env_ids] = 0
+        self.ep_success_latched[env_ids] = False
+        self.ep_force_limit_hit[env_ids] = False
+
+        # Capture the freshly-randomized initial pose (§11.4 initial_xy_offset /
+        # initial_orientation_error) — super()._reset_idx() above already called
+        # randomize_initial_state(env_ids), so self.held_pos/self.fixed_pos now
+        # reflect this new episode's sampled starting pose, not the old one.
+        held_base_pos, _ = factory_utils.get_held_base_pose(
+            self.held_pos, self.held_quat, self.cfg_task.name, self.cfg_task.fixed_asset_cfg, self.num_envs, self.device
+        )
+        target_held_base_pos, _ = factory_utils.get_target_held_base_pose(
+            self.fixed_pos, self.fixed_quat, self.cfg_task.name, self.cfg_task.fixed_asset_cfg, self.num_envs, self.device
+        )
+        initial_xy_offset = torch.linalg.vector_norm(
+            target_held_base_pos[:, 0:2] - held_base_pos[:, 0:2], dim=1
+        )
+        _, _, initial_yaw = euler_xyz_from_quat(self.fingertip_midpoint_quat)
+        self.ep_initial_xy_offset[env_ids] = initial_xy_offset[env_ids]
+        self.ep_initial_orientation_error[env_ids] = factory_utils.wrap_yaw(initial_yaw)[env_ids]
 
         # Compute initial action for correct EMA computation.
         fixed_pos_action_frame = self.fixed_pos_obs_frame + self.init_fixed_pos_obs_noise

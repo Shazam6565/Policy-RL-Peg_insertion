@@ -101,6 +101,11 @@ class ForgeEnvCfg(FactoryEnvCfg):
 
     ft_smoothing_factor: float = 0.25
 
+    # Ablation toggles (Policy A-D, see force_aware_peg_insertion_project.md §12).
+    # Both default True so Shaurya-ForcePegInsert-Direct-v0's behavior is unchanged.
+    use_force_obs: bool = True
+    use_force_penalty: bool = True
+
     obs_order: list = [
         "fingertip_pos_rel_fixed",
         "fingertip_quat",
@@ -128,12 +133,26 @@ class ForgeEnvCfg(FactoryEnvCfg):
         "force_threshold",
     ]
 
+    def __post_init__(self):
+        super().__post_init__()
+        if not self.use_force_obs:
+            self.obs_order = [o for o in self.obs_order if o not in ("ft_force", "force_threshold")]
+            self.state_order = [s for s in self.state_order if s not in ("ft_force", "force_threshold")]
+
 
 @configclass
 class ForgeTaskPegInsertCfg(ForgeEnvCfg):
     task_name = "peg_insert"
     task = ForgePegInsert()
     episode_length_s = 10.0
+
+
+@configclass
+class ForgeTaskPegInsertPolicyACfg(ForgeTaskPegInsertCfg):
+    """Policy A ablation: geometry-only observations, no force penalty (§12)."""
+
+    use_force_obs: bool = False
+    use_force_penalty: bool = False
 
 
 @configclass
