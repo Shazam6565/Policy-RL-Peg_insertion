@@ -251,18 +251,31 @@ class ForgeEnv(FactoryEnv):
     def _get_dones(self):
         """Label per-env termination reason (§9.6); resets stay synchronized (timeout-only).
 
-        §9.6 literally specifies early termination on success/drop/force-limit/etc, but
-        FactoryEnv.randomize_initial_state() (external isaaclab_tasks package) hard-codes
-        the assumption that every reset call covers ALL envs — it's ~200 lines of
-        un-indexed self.num_envs-shaped tensors and un-indexed write_root_pose_to_sim_index
-        calls, confirmed by a real crash (tensor size 64 vs 63) when a genuine per-env
-        `terminated` was returned. Re-implementing that method correctly in our fork would
-        mean forking ~200 lines of upstream physics/IK logic with no relation to this
-        change. Documented, deliberate deviation (see docs/experiment_log.md): keep
-        `terminated` all-false so every reset stays batch-synchronized (upstream dynamics
-        unchanged), but still compute and log a real per-env termination_reason every step
-        for evaluation — success/timeout/force_limit signals are genuine, just observed
-        rather than used to end the episode.
+        §9.6 literally specifies early termination on success/drop/force-limit/etc.
+        This fork does NOT implement that yet — `terminated` is returned all-false so
+        every reset stays batch-synchronized, and success/force_limit are recorded as
+        labels only. Documented, deliberate deviation (see docs/experiment_log.md).
+
+        Honest status of *why*, because an earlier version of this docstring overstated
+        it: a first attempt at per-env `terminated` did crash, but only on a shape
+        mismatch at factory_env.py:659 (`self.init_fixed_pos_obs_noise[:] =` assigning a
+        len(env_ids)-row tensor into a num_envs-row buffer). That is a one-line indexing
+        bug, not proof that per-env reset is infeasible. Two things remain genuinely
+        unknown and untested:
+
+        - How many further un-indexed `[:]` / self.num_envs-shaped writes lurk deeper in
+          randomize_initial_state(); only fixing line 659 and re-running would reveal them.
+        - Whether step_sim_no_action() (called 4+ times during reset, and which steps the
+          whole shared PhysX world) meaningfully perturbs still-running envs. Its docstring
+          warns it "should only be called during resets when all environments reset at the
+          same time", but that warning was never empirically verified here, and it is NOT
+          what caused the crash above — execution never reached it.
+
+        Also worth noting: that crash flagged 63/64 envs for reset on the *first* step,
+        which means the success/force-limit conditions were firing spuriously at episode
+        start (likely force_limit_threshold tripping on gripper-close transients, and/or
+        _get_curr_successes() reading True before the peg has moved). Those conditions
+        would need fixing before per-env termination could be evaluated fairly.
 
         peg_dropped/workspace_violation/joint_limit/jammed are not implemented — no
         existing signal or documented threshold for them exists on this fork, so they

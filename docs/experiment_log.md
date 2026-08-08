@@ -33,22 +33,44 @@ reason while running to the timeout. Confirmed via `next_10_steps.md` that this
 gap was already known (`FactoryEnv._get_dones()` returns `time_out, time_out`
 unconditionally) but not yet decided on.
 
-**Hit a real architectural conflict implementing it.** `FactoryEnv`'s own
-`_get_dones()` docstring warns *"it is important that all environments stay in
-sync (i.e., `_get_dones` should return all true or all false)"* — and
-`randomize_initial_state()` (external `isaaclab_tasks` package, ~200 lines)
-hard-codes that assumption throughout: `self.num_envs`-shaped tensors, `[:]`
-full-tensor assignments, and calls like `_held_asset.write_root_pose_to_sim_index(held_pose)`
-with no `env_ids=` at all. A genuine per-env `terminated` tensor crashed
-immediately (`RuntimeError: expanded size 64 must match existing size 63`) the
-first time 63/64 envs needed reset and 1 didn't. Re-implementing that method
-correctly would mean forking ~200 lines of upstream physics/IK logic unrelated to
-this change. **Decision: keep resets synchronized** (`terminated` stays all-false,
+**Attempted it, hit a crash, and — see the correction below — drew the wrong
+conclusion from it at the time.** A genuine per-env `terminated` tensor crashed
+immediately with `RuntimeError: expanded size 64 must match existing size 63`.
+**Decision taken: keep resets synchronized** (`terminated` stays all-false,
 episodes still run to the shared timeout) **but compute and log a real per-env
 `termination_reason`** (`"success"` / `"timeout"` / `"force_limit"` / `"other"`)
 every step via `self.extras["termination_reason"]`, in `ForgeEnv._get_dones()`
-(our fork, not the external package). This satisfies §9.6's logging requirement
-without touching upstream dynamics or duplicating fragile physics code.
+(our fork, not the external package). That satisfies §9.6's *logging* requirement,
+though not its early-termination requirement.
+
+> **Correction, same session, after re-reading the traceback properly.** The
+> original write-up here claimed the crash proved per-env reset was infeasible
+> and would need "forking ~200 lines of upstream physics/IK logic," blaming
+> `step_sim_no_action()` stepping the shared PhysX world. That was overstated and
+> partly backwards — a conclusion reached first, with justification found
+> afterwards. What the traceback actually shows:
+>
+> - The crash is a **single shape mismatch** at `factory_env.py:659`,
+>   `self.init_fixed_pos_obs_noise[:] = fixed_asset_pos_noise` — a `[:]` full-slice
+>   assignment receiving a `len(env_ids)`-row tensor. Fixable by indexing with
+>   `[env_ids]`.
+> - `step_sim_no_action()` is at line 661, **two lines later. Execution never
+>   reached it.** It played no part in this crash. Whether it would *behaviourally*
+>   perturb still-running envs is a real question but remains untested — its
+>   docstring warning was taken at face value, not verified.
+> - The `63` is `len(env_ids)`, i.e. 63 envs were flagged for reset. On the first
+>   step of an episode `time_out` is all-false, so those 63 came from `terminated`
+>   alone — meaning **success/force-limit were firing spuriously at episode start**
+>   (likely the 50 N `force_limit_threshold` placeholder tripping on gripper-close
+>   transients, and/or `_get_curr_successes()` reading True before the peg moves).
+>   That is a bug in the termination conditions, not evidence about reset
+>   architecture.
+>
+> The synchronized-reset decision stands for now — it is a defensible scope choice,
+> and `next_10_steps.md` step 2 explicitly listed it as an acceptable option. But it
+> should be recorded as *not yet attempted properly*, not as *proven impossible*.
+> Revisiting it means: fix the spurious termination conditions, change `[:]` to
+> `[env_ids]` at line 659, re-run, and find out empirically what else breaks.
 `peg_dropped`/`workspace_violation`/`joint_limit`/`jammed` are not implemented —
 no existing signal or documented numeric threshold for any of them exists
 anywhere in the code or project doc, so guessing at physical bounds was

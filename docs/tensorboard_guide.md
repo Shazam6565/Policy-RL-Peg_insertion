@@ -67,14 +67,19 @@ expected and, in this codebase, load-bearing: `_get_dones()` (our fork's overrid
 see [`docs/experiment_log.md`](experiment_log.md)) intentionally keeps every reset
 synchronized — all 64 envs finish and reset together, always at the same fixed
 timeout (`episode_length_s=10.0` combined with the physics/decimation settings
-yields 149 steps). We chose this deliberately: `FactoryEnv.randomize_initial_state()`
-(upstream, in the external `isaaclab_tasks` package) has ~200 lines of code that
-assume every reset call covers *all* environments, and a genuine per-env early
-termination on success/force-limit broke that assumption with a real crash
-(`tensor size 64 vs 63`). So episodes still always run to the full timeout — early
-success/force-limit conditions are labeled (see `termination_reason` below) but
-don't end the episode early. If you ever see this line move, something upstream of
-our fork changed the timeout config or the sync-reset assumption was relaxed.
+yields 149 steps). Episodes always run to the full timeout — early success and
+force-limit conditions are *labeled* (see `termination_reason` below) but don't
+end the episode. If you ever see this line move, something upstream of our fork
+changed the timeout config or the sync-reset assumption was relaxed.
+
+Early termination (which project §9.6 does call for) is **not yet implemented,
+and not proven impossible** — an initial attempt crashed on a one-line shape bug
+in upstream's `randomize_initial_state()` (`factory_env.py:659`, a `[:]`
+full-slice assignment), which was mistakenly read at the time as evidence that
+per-env reset was infeasible. See the correction block in
+[`docs/experiment_log.md`](experiment_log.md) for what the traceback actually
+shows. Treat the flat 149 here as a current property of this fork, not a settled
+architectural limit.
 
 **A field this graph implies but doesn't show — `termination_reason`:** our
 `ForgeEnv._get_dones()` computes a per-env label (`"success"`, `"timeout"`,
