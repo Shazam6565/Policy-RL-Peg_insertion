@@ -5,6 +5,66 @@ design, distinct from the final technical report. Newest entry on top.
 
 ---
 
+## 2026-08-12 — Curated representative videos (success + near-miss close-ups)
+
+**Closed the "record representative videos" gap left by the 2026-08-09 to -12 entry
+below.** That earlier demo video (`play_rl_games.py --video --num_envs=4`) showcased the
+checkpoint but wasn't curated to one clear success and one clear failure/near-miss, and
+its default wide overview camera (`viewer.eye=(7.5,7.5,7.5)`, the IsaacLab default) is
+too far back to see the peg/socket at all — confirmed by extracting a frame: four
+robots reduced to thumbnail-sized cubes on a floor grid, no task detail visible.
+
+**Tuned a close-up camera** by rendering single test frames at a few candidate
+`viewer.eye`/`viewer.lookat` world-space offsets and inspecting them directly, landing
+on `eye = origin + (1.0, -0.85, 0.65)`, `lookat = origin + (0.5, 0.0, 0.15)` — a 3/4
+view low over the table that clearly shows the Franka gripper, the yellow peg, and the
+socket's mounting hole in the same frame.
+
+**Finding a success to record turned out to be the hard part.** At 7.8% success (seed
+44's real nominal-suite number, §22), a naive approach — reset a single env, step it
+deterministically until termination, repeat — needed ~13 episodes on average to hit one.
+Two sequential single-env scans (seeds 5000 and 6000, 30 then 40 episodes, ~35 min of
+wall-clock) came back 0/70 successes combined. At true p=0.078 that's a ~0.3% joint
+tail event — worth checking for a bug before writing it off as bad luck, but a scan of
+`factory_env.py`'s randomization code found only `torch.rand`/`torch.randn` draws sized
+by `len(env_ids)`, nothing that behaves differently at `num_envs=1` (no
+`linspace`-style curriculum spread across the batch that would collapse at batch size
+1). Left unresolved as a real, if small, open question — but sidestepped rather than
+chased further, because a better approach was sitting in the data already collected:
+every episode in the real evaluation CSVs runs to exactly step 149 regardless of
+outcome (`awk` over `policy_a_seed44_nominal.csv`: 500/500 rows have
+`episode_steps == 149`), meaning a whole *batch* of envs finishes its first episode
+**simultaneously**. Running `num_envs=64` for exactly 149 steps (one deterministic
+pass, ~2 minutes of sim time including Kit startup) gives ~99% odds of at least one
+success by the binomial bound, and did: **11/64 succeeded** on the first try
+(seed 1000, matching the real nominal suite's own first eval seed).
+
+**Recorded both clips by re-running the identical deterministic batch** (same task,
+checkpoint, seed 1000, `num_envs=64` — same configuration as the scan, so per-env
+outcomes reproduce exactly) with the world-space viewer camera recentered on one
+specific env's origin plus the close-up offset above, camera rendering + `RecordVideo`
+enabled, and `video_length=155`. Picked:
+
+- **Success clip** — env 39, essentially a textbook insertion: `insertion_depth_final
+  ≈ 0.0001` (residual gap to fully seated), `lateral_error_final ≈ 0.0006`,
+  `max_contact_force = 13.2 N` (well under the 50 N hard limit and the [5,10] N soft
+  band). Frame-by-frame: peg visibly hovering above the socket early, fully seated
+  and the arm settled by the end of the 149-step episode.
+- **Near-miss clip** — env 21, timeout despite `insertion_depth_final ≈ 0.0015`
+  (~15x closer to seated than env 39's own successful margin implies is required —
+  the success/fail boundary here is razor-thin, not a case of the policy being
+  visibly far off). Camera shows a clean approach and insertion attempt; the wrist
+  rotates in the final ~20 steps in a way that happens to occlude the peg from this
+  particular angle right at the end — a real limitation of using one fixed camera per
+  clip rather than a bug in the outcome data.
+
+Both written to the existing run's own `videos/play/` directory (gitignored, same
+convention as the original showcase video):
+`force_peg_rl/logs/rl_games/Forge/2026-08-10_18-03-38/videos/play/closeup-success-step-0.mp4`
+and `.../closeup-nearmiss-step-0.mp4`.
+
+---
+
 ## 2026-08-09 to 2026-08-12 — Policy A: 3-seed training complete, real §22 evaluation results, monitoring tooling
 
 **Fixed a real inefficiency before starting the real run.** The first attempt at step 7
