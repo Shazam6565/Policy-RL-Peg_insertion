@@ -5,6 +5,103 @@ design, distinct from the final technical report. Newest entry on top.
 
 ---
 
+## 2026-08-09 to 2026-08-12 — Policy A: 3-seed training complete, real §22 evaluation results, monitoring tooling
+
+**Fixed a real inefficiency before starting the real run.** The first attempt at step 7
+used `--num_envs=1024` with the PPO config's `minibatch_size` left at its default
+(`512`, tuned for the yaml's own `num_actors: 128`). That mismatch meant 256 minibatches
+× 4 mini_epochs = 1024 gradient steps/epoch — 8× more backward passes than the config
+was tuned for — and, combined with this box's GPU-bound sim-stepping ceiling (~1150 fps
+regardless of env count, confirmed identical at 512 and 1024 envs), projected to a
+~50.6 hour run. Killed it after ~40 minutes and relaunched tuned:
+`--num_envs=512`, `agent.params.config.minibatch_size=2048` (Hydra CLI override, keeps
+~32 minibatches/epoch matching the yaml's own ratio), `--max_iterations=500`/seed. That
+cut per-epoch cost from 181s to ~84s at baseline (no contention) — a ~2.2× fix,
+independent of anything below. Also reverted an unrelated, already-uncommitted
+`force_limit_threshold` change (50.0 → 15.0 N) that had crept onto the shared `ForgeTask`
+base class from separate early-termination diagnostic work — the 15N figure was measured
+from a 20-iteration near-random checkpoint and wasn't representative of what a trained
+policy's real force profile should be judged against, so it went back to the original
+50N placeholder rather than silently changing what Policy A trained against.
+
+**Real GPU contention dominated the actual wall-clock time anyway.** Two Omniverse Kit
+editor processes from an unrelated `kit-app-template` session started sharing this box's
+single GPU around 03:24 on the 9th, and an `ollama` instance serving a 27GB model
+(`ornith:35b-q4_K_M`) at 100% GPU joined around 19:59 — driving per-epoch cadence as high
+as ~400s for long stretches, against the 83.6s tuned baseline. Decision (confirmed with
+the user): let training run through the contention rather than interfere with the other
+sessions. Net result: seed 42 started 2026-08-09 01:56, all three seeds finished
+2026-08-11 08:09 — about 30.5 hours wall-clock for what would have been roughly 27 hours
+at the tuned baseline cadence with an idle GPU throughout.
+
+**Final training numbers, 500 epochs/seed:**
+
+| Seed | Final reward | Best reward | Final success | Best success |
+|---|---|---|---|---|
+| 42 | 151.7 | 165.1 | 11.3% | 16.8% |
+| 43 | 154.0 | 169.9 | 18.0% | 21.9% |
+| 44 | 148.9 | 173.9 | 13.9% | 17.4% |
+
+Reasonably tight clustering across three independent seeds — this is the repeatability
+check from `next_10_steps.md` step 9, not one lucky/unlucky run.
+
+**Built and maintained a live "Policy A Training Monitor" published Artifact**
+throughout the run (two URLs — a second was minted partway through when the first
+stopped rendering for the user, root cause never fully confirmed but presumed a client
+cache issue since server-side content was always correct on refetch). Regenerated from
+the live TensorBoard event file and a fresh `nvidia-smi`/`ps` GPU-process snapshot on
+every ~20-minute poll cycle and republished on every heartbeat, not just periodically.
+Evolved from a bare progress readout into a small research-report layout (plain-language
+summary, method table, cross-seed results comparison with a grouped bar chart, then the
+live detail charts/cadence/contention table/decision log) after the user asked for
+something a third party could actually understand. Found and fixed a real bug while
+building it: `rewards/iter` and `Episode/Metrics/success_rate` are logged by `rl_games`
+with the **epoch number** as their TensorBoard step, while `info/epochs` and
+`performance/*` use **cumulative frame count** — looking reward/success up by the wrong
+step domain silently returned `None` for every point on the first publish.
+
+**Step 8 — real evaluation, not the training curve.** Ran
+`scripts/evaluate_policy.py` against all three checkpoints' `nn/Forge.pth`, `nominal`
+suite (500 deterministic episodes/checkpoint, fixed seeds `[1000, 1001, 1002]`,
+`is_deterministic=True`, 64 envs):
+
+| Seed | Success rate | Median steps | Peak-force p95 | Force-limit rate |
+|---|---|---|---|---|
+| 42 | 6.4% | 149 | 39.3 N | 2.4% |
+| 43 | 7.6% | 149 | 34.7 N | 1.0% |
+| 44 | 7.8% | 149 | 37.6 N | 2.0% |
+| **mean (range)** | **7.3% (6.4–7.8%)** | 149 | 37.2 N (34.7–39.3) | 1.8% (1.0–2.4%) |
+
+This is meaningfully lower than the training-time `success_rate` above (11–18% final),
+which is expected rather than a bug: the training number is measured under the
+stochastic exploration policy against the continuously-randomized training
+distribution, while this is deterministic inference against three fixed evaluation
+seeds — different measurement, not a contradiction. **7.3% is the real, trustworthy
+Policy A baseline number for the §22 results table** — genuinely low for a geometry-only
+ablation, which is the expected direction (force-awareness should matter for this task)
+but is now actual evidence rather than an assumption. CSVs written to
+`force_peg_rl/results/raw/policy_a_seed{42,43,44}_nominal.csv` (500 rows each).
+
+**Recorded a demo video** of the seed-44 checkpoint (highest eval success, 7.8%) via
+`play_rl_games.py --video --video_length=250 --num_envs=4`: confirms the 20-dim
+geometry-only observation space and 7-dim action space in the player log, matches
+the ablation's spec. Saved under that run's own `videos/play/rl-video-step-0.mp4`.
+
+**Also landing in this commit:** the early-termination diagnostic work from the 2026-08-09
+session (`use_early_termination` flag, `Shaurya-ForcePegInsert-EarlyTerm-Direct-v0` task,
+per-step `debug/n_*` reset counters) that had been sitting uncommitted since — genuinely
+finished and documented at the time, just never committed. It's opt-in and defaults to
+`False` on the shared `ForgeTask`/`ForgeEnvCfg` base, so it changes nothing about how
+Policy A trained or evaluated above.
+
+**Next:** Policy B (force observations back, still no contact penalty) is next per the
+six-week plan. Worth deciding up front whether to keep training on this DGX Spark given
+today's contention experience, or move the next ablation to a machine with a dedicated
+GPU — the tuning fix and the contention are separable causes of slow wall-clock time, but
+only one of them is fixable from inside this repo.
+
+---
+
 ## 2026-08-08 — Move to DGX Spark, Policy A ablation, termination-reason logging, TensorBoard writeup
 
 **Moved off Brev entirely.** This machine (`bas-zeus`) is a DGX Spark: aarch64

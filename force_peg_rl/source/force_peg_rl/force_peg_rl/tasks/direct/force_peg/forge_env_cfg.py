@@ -106,6 +106,13 @@ class ForgeEnvCfg(FactoryEnvCfg):
     use_force_obs: bool = True
     use_force_penalty: bool = True
 
+    # EXPERIMENTAL (§9.6). Default False keeps every existing task on the
+    # synchronized timeout-only resets they were trained with. See ForgeEnv._get_dones()
+    # for why this is not simply switched on: FactoryEnv's reset drives the *shared*
+    # PhysX world (global gravity toggle, un-indexed sim writes, ~1000+ substeps via
+    # step_sim_no_action), so a partial reset perturbs the envs that are still running.
+    use_early_termination: bool = False
+
     obs_order: list = [
         "fingertip_pos_rel_fixed",
         "fingertip_quat",
@@ -153,6 +160,18 @@ class ForgeTaskPegInsertPolicyACfg(ForgeTaskPegInsertCfg):
 
     use_force_obs: bool = False
     use_force_penalty: bool = False
+
+
+@configclass
+class ForgeTaskPegInsertEarlyTermCfg(ForgeTaskPegInsertCfg):
+    """EXPERIMENTAL: force-aware baseline with §9.6 early termination enabled.
+
+    Exists to measure what a partial (non-synchronized) reset actually does to the
+    envs that are still running — see ForgeEnv._get_dones(). Not intended for
+    producing results; the ablation runs use the two configs above.
+    """
+
+    use_early_termination: bool = True
 
 
 @configclass

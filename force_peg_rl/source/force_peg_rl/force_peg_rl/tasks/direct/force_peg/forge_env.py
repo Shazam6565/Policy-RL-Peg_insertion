@@ -249,37 +249,44 @@ class ForgeEnv(FactoryEnv):
         )
 
     def _get_dones(self):
-        """Label per-env termination reason (§9.6); resets stay synchronized (timeout-only).
+        """Label per-env termination reason (§9.6); early termination is opt-in and experimental.
 
-        §9.6 literally specifies early termination on success/drop/force-limit/etc.
-        This fork does NOT implement that yet — `terminated` is returned all-false so
-        every reset stays batch-synchronized, and success/force_limit are recorded as
-        labels only. Documented, deliberate deviation (see docs/experiment_log.md).
+        By default (`use_early_termination=False`) `terminated` is all-false, so
+        DirectRLEnv resets only on timeout and every env resets together. Success and
+        force_limit are still computed and latched per env, but as *labels* rather than
+        as episode-ending events.
 
-        Honest status of *why*, because an earlier version of this docstring overstated
-        it: a first attempt at per-env `terminated` did crash, but only on a shape
-        mismatch at factory_env.py:659 (`self.init_fixed_pos_obs_noise[:] =` assigning a
-        len(env_ids)-row tensor into a num_envs-row buffer). That is a one-line indexing
-        bug, not proof that per-env reset is infeasible. Two things remain genuinely
-        unknown and untested:
+        Why it is not simply enabled — the real reason, established by measurement after
+        two earlier wrong explanations were recorded and retracted (see
+        docs/experiment_log.md): FactoryEnv.randomize_initial_state() is a scripted
+        ~1-2 s IK + grasp routine that drives the **shared** PhysX world. Resetting a
+        subset of envs therefore disturbs the ones still running:
 
-        - How many further un-indexed `[:]` / self.num_envs-shaped writes lurk deeper in
-          randomize_initial_state(); only fixing line 659 and re-running would reveal them.
-        - Whether step_sim_no_action() (called 4+ times during reset, and which steps the
-          whole shared PhysX world) meaningfully perturbs still-running envs. Its docstring
-          warns it "should only be called during resets when all environments reset at the
-          same time", but that warning was never empirically verified here, and it is NOT
-          what caused the crash above — execution never reached it.
+        - factory_env.py:624/831 — set_gravity(0,0,0) then restore. Global to the whole
+          scene, so every running env free-falls for the duration of the reset.
+        - factory_env.py:549-551 — write_joint_position_to_sim_index /
+          write_joint_velocity_to_sim_index / set_joint_position_target_index are called
+          with **no env_ids**, hard-teleporting every robot once per IK iteration.
+        - factory_env.py:792-793 — write_root_pose_to_sim_index(root_pose=held_pose) with
+          **no env_ids**, teleporting every env's peg into its gripper.
+        - step_sim_no_action() runs 4+ times plus inside two loops (~1000+ physics
+          substeps) with no policy action applied.
 
-        Also worth noting: that crash flagged 63/64 envs for reset on the *first* step,
-        which means the success/force-limit conditions were firing spuriously at episode
-        start (likely force_limit_threshold tripping on gripper-close transients, and/or
-        _get_curr_successes() reading True before the peg has moved). Those conditions
-        would need fixing before per-env termination could be evaluated fairly.
+        Indexing fixes alone cannot address the gravity toggle or the shared-sim
+        stepping. Corroborating evidence: every IsaacLab task that *does* per-env
+        termination (quadcopter, anymal_c, cartpole, franka_cabinet, ...) has a
+        _reset_idx built purely from env_ids-indexed buffer writes and
+        write_*(..., env_ids=env_ids), and none of them step the simulator inside reset.
+        Factory/Forge/AutoMate are the only FactoryEnv subclasses and all three use the
+        synchronized timeout-only pattern.
+
+        The flag exists to *measure* that perturbation rather than argue about it. The
+        debug/n_* counters below report exactly which conditions fired each step, so a
+        reset count no longer has to be inferred from a traceback.
 
         peg_dropped/workspace_violation/joint_limit/jammed are not implemented — no
         existing signal or documented threshold for them exists on this fork, so they
-        fall through to "other" rather than guessing at physical bounds.
+        fall through to the timeout label rather than guessing at physical bounds.
         """
         self._compute_intermediate_values(dt=self.physics_dt)
 
@@ -328,12 +335,26 @@ class ForgeEnv(FactoryEnv):
         _, _, curr_yaw = euler_xyz_from_quat(self.fingertip_midpoint_quat)
         orientation_error = factory_utils.wrap_yaw(curr_yaw)
 
-        # An episode has genuinely ENDED only on time_out — `terminated` is always
-        # false here, so DirectRLEnv.step() resets on time_out alone. Including
-        # succeeded/force_limit_exceeded would flag envs that are still running and
-        # keep flagging them every subsequent step, so an evaluation script consuming
-        # this would write many duplicate rows for a single episode.
-        any_done = time_out
+        if self.cfg.use_early_termination:
+            terminated = succeeded | force_limit_exceeded
+        else:
+            terminated = torch.zeros_like(time_out)
+
+        # An episode has genuinely ENDED when DirectRLEnv is about to reset it, i.e.
+        # terminated | time_out. With early termination off this is time_out alone;
+        # anything else would flag envs that keep running, and would keep flagging them
+        # every subsequent step, so an evaluation script consuming this would write many
+        # duplicate rows for a single episode.
+        any_done = terminated | time_out
+
+        # Per-step condition counts, so "why did N envs reset" is answered directly
+        # rather than inferred from a traceback. Cheap (5 scalars/step) and the whole
+        # point of the use_early_termination experiment.
+        self.extras["debug/n_succeeded"] = succeeded.sum()
+        self.extras["debug/n_force_limit"] = force_limit_exceeded.sum()
+        self.extras["debug/n_time_out"] = time_out.sum()
+        self.extras["debug/n_terminated"] = terminated.sum()
+        self.extras["debug/n_reset"] = any_done.sum()
         self.extras["eval/episode_steps"] = self.ep_step_count.clone()
         self.extras["eval/max_contact_force"] = self.ep_max_contact_force.clone()
         self.extras["eval/mean_contact_force"] = self.ep_sum_contact_force / self.ep_step_count.clamp(min=1)
@@ -347,7 +368,6 @@ class ForgeEnv(FactoryEnv):
         self.extras["eval/initial_orientation_error"] = self.ep_initial_orientation_error.clone()
         self.extras["eval/any_done"] = any_done
 
-        terminated = torch.zeros_like(time_out)
         return terminated, time_out
 
     def _get_rewards(self):
@@ -397,13 +417,31 @@ class ForgeEnv(FactoryEnv):
 
     def _reset_idx(self, env_ids):
         """Perform additional randomizations."""
+        # Upstream factory_env.py:659 does `self.init_fixed_pos_obs_noise[:] = <(len(env_ids),3)>`.
+        # That full-slice assignment only works when len(env_ids) is num_envs (exact) or
+        # 1 (broadcasts, silently corrupting all rows) — any other partial reset raises
+        # "expanded size (num_envs) must match existing size (len(env_ids))".
+        #
+        # The buffer must stay num_envs-shaped throughout: randomize_initial_state calls
+        # step_sim_no_action(), which runs _compute_intermediate_values() over ALL envs
+        # mid-reset and reads this buffer. (Swapping in a smaller temporary was tried and
+        # crashed there instead — "size of tensor a (64) must match tensor b (2)".)
+        #
+        # There is no way to satisfy line 659 from outside for a partial batch: it raises
+        # for every len(env_ids) except num_envs and 1. Overriding randomize_initial_state()
+        # wholesale would mean forking ~200 lines of upstream IK/grasp logic. So under
+        # early termination we upgrade a partial reset to a full one — every env resets
+        # together. This preserves the synchronized-reset invariant the upstream routine
+        # requires, at the cost of ending some episodes prematurely; the debug/n_* counters
+        # in _get_dones() record how often that happens so the cost is measurable.
+        if self.cfg.use_early_termination and env_ids is not None and len(env_ids) != self.num_envs:
+            self.extras["debug/n_partial_reset_upgraded"] = torch.tensor(len(env_ids), device=self.device)
+            env_ids = torch.arange(self.num_envs, device=self.device, dtype=env_ids.dtype)
+
         super()._reset_idx(env_ids)
 
         # Reset per-episode evaluation accumulators (see _get_dones()) for the envs
-        # actually being reset — NOTE: because our _get_dones() keeps `terminated`
-        # all-false (see its docstring), env_ids here only ever contains timed-out
-        # envs, so this reset happens in sync with the values already having been
-        # read out via self.extras["eval/*"] the same step.
+        # actually being reset.
         self.ep_max_contact_force[env_ids] = 0.0
         self.ep_sum_contact_force[env_ids] = 0.0
         self.ep_force_above_threshold_steps[env_ids] = 0
