@@ -1,0 +1,31 @@
+# Evaluation suites (project doc §11.3). Only `nominal` is implemented so far —
+# per next_10_steps.md step 6, the randomized OOD suites (pose_shift, low/high_friction,
+# mass_shift, combined_ood) are deferred to Week 5's robustness pass and are not
+# yet wired into scripts/evaluate_policy.py.
+
+nominal:
+  episodes: 500
+  seeds: [1000, 1001, 1002]
+
+# --- Not yet implemented (Week 5) ---------------------------------------------
+# pose_shift:
+#   episodes: 500
+#   xy_offset_range: [-0.012, 0.012]
+#   yaw_range_deg: [-12, 12]
+#
+# low_friction:
+#   episodes: 500
+#   peg_friction_range: [0.2, 0.4]
+#
+# high_friction:
+#   episodes: 500
+#   peg_friction_range: [0.9, 1.2]
+#
+# mass_shift:
+#   episodes: 500
+#   mass_scale_range: [0.6, 1.5]
+#
+# combined_ood:
+#   episodes: 1000
+#   wider_pose_range: true
+#   wider_dynamics_range: true

@@ -13,6 +13,7 @@ import logging
 import math
 import os
 import random
+import sys
 import time
 from datetime import datetime
 from distutils.util import strtobool
@@ -199,3 +200,7 @@ def run(argv: list[str]) -> None:
             env.close()
         except KeyboardInterrupt:
             pass
+
+
+if __name__ == "__main__":
+    run(sys.argv[1:])

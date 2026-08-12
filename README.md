@@ -117,11 +117,23 @@ context you need is which task ID to pass: `Shaurya-ForcePegInsert-Direct-v0`.
 
 ## Results
 
-Not yet available — no ablation policy has been trained yet (see Status above). The results
-table will follow the template in
-[project doc §22](force_aware_peg_insertion_project.md#22-readme-results-table-template) once
-Policy A through D have real numbers. Per the project doc's own rule: *"Do not fill the table
-with expected values. Only report measured results."*
+Policy A has real, measured numbers as of 2026-08-12; B, C, and D are not trained yet. Per the
+project doc's own rule: *"Do not fill the table with expected values. Only report measured
+results"* — so those rows stay `TBD`, not filled with guesses.
+
+| Policy | Force Obs. | Force Penalty | Nominal Success | OOD Success | Peak Force p95 | Jam Rate |
+|---|---:|---:|---:|---:|---:|---:|
+| A: Geometry baseline | No | No | 7.3% (6.4–7.8%, n=3 seeds) | TBD | 37.2 N | TBD (not instrumented) |
+| B: Force observation | Yes | No | TBD | TBD | TBD | TBD |
+| C: Force penalty | No | Yes | TBD | TBD | TBD | TBD |
+| D: Force-aware | Yes | Yes | TBD | TBD | TBD | TBD |
+
+Per-seed breakdown, caveats (episodes never terminate early, so "force-limit rate" is an
+incidence rate not a true termination rate; jam rate has no detection instrumentation at all
+yet), and the raw per-episode CSVs are in
+[`results/tables/policy_a_nominal.md`](results/tables/policy_a_nominal.md) /
+[`results/raw/`](results/raw/). Representative videos (a clean success and a genuine near-miss)
+are in [`results/videos/`](results/videos/).
 
 ---
 
