@@ -132,8 +132,28 @@ Per-seed breakdown, caveats (episodes never terminate early, so "force-limit rat
 incidence rate not a true termination rate; jam rate has no detection instrumentation at all
 yet), and the raw per-episode CSVs are in
 [`results/tables/policy_a_nominal.md`](results/tables/policy_a_nominal.md) /
-[`results/raw/`](results/raw/). Representative videos (a clean success and a genuine near-miss)
-are in [`results/videos/`](results/videos/).
+[`results/raw/`](results/raw/).
+
+Representative videos, Policy A / seed 44 — a clean success and a genuine near-miss:
+
+<table>
+<tr>
+<td>
+
+**Success**
+
+<video src="results/videos/policy_a_seed44_success_closeup.mp4" controls width="360"></video>
+
+</td>
+<td>
+
+**Near-miss**
+
+<video src="results/videos/policy_a_seed44_nearmiss_closeup.mp4" controls width="360"></video>
+
+</td>
+</tr>
+</table>
 
 ---
 
