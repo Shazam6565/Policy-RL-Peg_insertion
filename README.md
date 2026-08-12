@@ -134,12 +134,13 @@ yet), and the raw per-episode CSVs are in
 [`results/tables/policy_a_nominal.md`](results/tables/policy_a_nominal.md) /
 [`results/raw/`](results/raw/).
 
-Representative videos, Policy A / seed 44 — a clean success and a genuine near-miss. GitHub
-doesn't inline-embed repo-hosted `.mp4`s in a README, but clicking either link opens GitHub's
-own video player on the file's blob page:
+Representative videos, Policy A / seed 44 — a clean success and a genuine near-miss (GIFs, so
+they play inline; full-quality `.mp4` source for each is linked underneath):
 
-- ▶️ [Success close-up](results/videos/policy_a_seed44_success_closeup.mp4)
-- ▶️ [Near-miss close-up](results/videos/policy_a_seed44_nearmiss_closeup.mp4)
+| Success | Near-miss |
+|---|---|
+| ![Success close-up](results/videos/policy_a_seed44_success_closeup.gif) | ![Near-miss close-up](results/videos/policy_a_seed44_nearmiss_closeup.gif) |
+| [.mp4 source](results/videos/policy_a_seed44_success_closeup.mp4) | [.mp4 source](results/videos/policy_a_seed44_nearmiss_closeup.mp4) |
 
 ---
 
