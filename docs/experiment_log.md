@@ -5,6 +5,127 @@ design, distinct from the final technical report. Newest entry on top.
 
 ---
 
+## 2026-08-12 — Closed out Week 4 setup: all four policies ready for real training
+
+Item 10, wrapping up `docs/2026-08-09_next_10_steps.md` (items 6–9 done this session,
+see the three entries below). Status check going into the real 9-run batch:
+
+- **Policy A** — done. 3 seeds trained, evaluated against `nominal` (7.3% success,
+  range 6.4–7.8%), results table and README written, representative videos curated.
+- **Policy B** (`use_force_obs=True, use_force_penalty=False`) — registered as
+  `Shaurya-ForcePegInsert-PolicyB-Direct-v0`, smoke-tested: obs size 24 (force
+  channels present), `logs_rew_contact_penalty` flat 0.0. Ready for real training.
+- **Policy C** (`use_force_obs=False, use_force_penalty=True`) — registered as
+  `Shaurya-ForcePegInsert-PolicyC-Direct-v0`, smoke-tested: obs size 20 (matches
+  Policy A), `logs_rew_contact_penalty` nonzero. Ready for real training.
+- **Policy D** (`use_force_obs=True, use_force_penalty=True`) — no new
+  registration; `Shaurya-ForcePegInsert-Direct-v0` already is Policy D, and was
+  itself proven bit-identical to upstream FORGE during the original fork
+  verification (2026-08-07 entry). Ready for real training, no smoke test needed.
+
+Venue and budget for the remaining work (decided this session, see the "Closed out
+Policy A / Week 3" entry below): stay on the shared DGX Spark, 9 real runs (B, C, D
+× 3 seeds each), same tuned settings proven for Policy A (`--num_envs=512`,
+`agent.params.config.minibatch_size=2048`, `--max_iterations=500`/seed), run order
+B → C → D per the queue-position decision above.
+
+This closes Week 4 setup. `docs/2026-08-09_next_10_steps.md` is fully struck
+through; `docs/2026-08-12_next_10_steps.md` starts next, scoped to the actual
+B/C/D training + evaluation batch (the real work items 7–10 of the prior doc
+deliberately stopped short of).
+
+---
+
+## 2026-08-12 — Confirmed Policy D is ready, decided its queue position
+
+Item 9. Policy D needed no implementation work — re-verified rather than assumed:
+`ForgeTaskPegInsertCfg` (what `Shaurya-ForcePegInsert-Direct-v0` already registers)
+inherits `use_force_obs=True, use_force_penalty=True` straight from the base
+`ForgeEnvCfg` with no overrides in between. That is Policy D's spec exactly — force
+observations in, force penalty active. No new config class, no new `gym.register`.
+This is by design: Policy D is the config Policy A was carved out of when the
+ablation toggles were built, not a fourth arm that still needs building.
+
+Decided where it sits in the 9-run queue: **last**, after B and C. B and C are the
+two genuinely new arms that just got registered and smoke-tested (previous entry);
+D is a fresh 3-seed run of a config already proven bit-identical to upstream during
+the original fork verification (2026-08-07 entry), so it carries no implementation
+risk and doesn't need to go first to surface problems early — there's nothing left
+to surface. It can slot in wherever the DGX Spark queue has room without blocking
+anything else.
+
+All four policies are now ready to enter real 3-seed training: A done and evaluated,
+B/C registered and smoke-tested, D confirmed and queued. Next: item 10, Week 4
+setup wrap-up.
+
+---
+
+## 2026-08-12 — Registered and smoke-tested Policy B and Policy C
+
+Item 8. Added `ForgeTaskPegInsertPolicyBCfg` (`use_force_obs=True,
+use_force_penalty=False`) and `ForgeTaskPegInsertPolicyCCfg` (`use_force_obs=False,
+use_force_penalty=True`) to `forge_env_cfg.py` — genuinely zero new mechanism, just
+the same toggle combination Policy A already proved out. Registered as
+`Shaurya-ForcePegInsert-PolicyB-Direct-v0` / `-PolicyC-Direct-v0` in `__init__.py`.
+
+Made the early-termination call the prior entry flagged as open: both stay on the
+base `use_early_termination=False` default, the same synchronized-timeout resets
+Policy A trained/evaluated with, for apples-to-apples comparability across the
+ablation. Recorded in each config's own docstring so it reads as a deliberate
+choice, not an unexamined default.
+
+Discovered this session's shell is *on* the DGX Spark box itself (`bas-zeus`,
+GPU `GB10`), with Isaac Lab installed locally at `~/isaac/IsaacLab` — not just
+reachable via the `brev shell isaac-sim` path CLAUDE.md documents. Running
+`isaaclab.sh -p` needed two local fixes, neither specific to this task: an
+unrelated project-level `.venv` (from other work in this repo, nothing to do with
+Isaac Lab) was set as `$VIRTUAL_ENV` and silently hijacked `isaaclab.sh`'s own
+env-selection logic ahead of its `$ISAACLAB_PATH/env_isaaclab` fallback — worked
+around with `env -u VIRTUAL_ENV -u CONDA_PREFIX`; and the app's own documented
+`LD_PRELOAD=/lib/aarch64-linux-gnu/libgomp.so.1` requirement for shared-library
+load order. Worth remembering for any future command run from this shell.
+
+Ran `scripts/list_envs.py` — both tasks registered correctly. Then
+`--num_envs=64 --max_iterations=20` smoke tests for each, verified against the
+run's own TensorBoard event file rather than trusting console output alone:
+
+- **Policy B**: actor `RunningMeanStd (24,)` (full size, force channels present)
+  and `logs_rew_contact_penalty` flat `0.0` across all 20 iterations — force
+  observed, not penalized, as intended.
+- **Policy C**: actor `RunningMeanStd (20,)` (matches Policy A's reduced size)
+  and `logs_rew_contact_penalty` nonzero (peaked ~5.0/iter) — force not observed,
+  but penalized, as intended.
+
+Both prove the toggle combinations actually produce the intended ablation
+observation/reward shape, not just successful `gym.register`. Smoke-test
+checkpoints/logs are under `force_peg_rl/logs/` (gitignored, as always) — nothing
+here was meant to be kept past verifying the plumbing. Next session: item 9
+(confirm Policy D needs no new registration, decide queue position) and item 10
+(Week 4 setup wrap-up), then the real 9-run B/C/D training batch per the venue/
+budget decision above.
+
+---
+
+## 2026-08-12 — Closed out Policy A / Week 3, decided Policy B/C/D venue and budget
+
+Two housekeeping items, both queued as `docs/2026-08-09_next_10_steps.md` items 6–7.
+
+Closed item 6: the root `README.md` Status section still read "Week 2–3 ... Not yet
+started: Policy A", stale since Policy A's real training/eval landed. Updated to
+reflect the real 7.3% nominal success rate and link the results table.
+
+Decided item 7: Policy B/C/D's training venue stays the shared DGX Spark rather than
+moving to a dedicated-GPU machine, despite the GPU contention that cost real
+wall-clock time on Policy A's run (see 2026-08-09 to -12 entry below) — accepting
+that risk again rather than spending session time on migration. Budget: all 9
+remaining real runs (3 policies × 3 seeds) go through as planned, same tuned
+settings proven for Policy A (`--num_envs=512`,
+`agent.params.config.minibatch_size=2048`, `--max_iterations=500`/seed) unless a
+policy-specific reason to deviate turns up. Next session starts at item 8:
+register and smoke-test Policy B and Policy C.
+
+---
+
 ## 2026-08-12 — Curated representative videos (success + near-miss close-ups)
 
 **Closed the "record representative videos" gap left by the 2026-08-09 to -12 entry

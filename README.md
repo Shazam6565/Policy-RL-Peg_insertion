@@ -16,12 +16,14 @@ This README is the map; that file is the spec.
 
 ## Status
 
-Early stage — Week 2–3 of the [six-week plan](force_aware_peg_insertion_project.md#20-six-week-execution-plan).
+Week 3–4 of the [six-week plan](force_aware_peg_insertion_project.md#20-six-week-execution-plan).
 Done so far: environment installed and verified, the official `Isaac-Forge-PegInsert-Direct-v0`
 baseline reproduced, forked into our own external project (`force_peg_rl/`) and proven
 **bit-identical** to upstream under the same seed, per-component reward logging verified live
-in TensorBoard. Not yet started: Policy A (the geometry-only ablation baseline) and everything
-downstream of it (B, C, D, evaluation suites, the technical report).
+in TensorBoard, and **Policy A (geometry-only ablation) fully trained and evaluated** — 3 seeds,
+7.3% nominal success rate (range 6.4–7.8%), see
+[`results/tables/policy_a_nominal.md`](results/tables/policy_a_nominal.md). Not yet started:
+Policy B, C, D (registered/smoke-tested next) and the technical report.
 
 See [`docs/experiment_log.md`](docs/experiment_log.md) for the dated, running account of what
 was actually done and observed each session, and [`docs/next_10_steps.md`](docs/next_10_steps.md)

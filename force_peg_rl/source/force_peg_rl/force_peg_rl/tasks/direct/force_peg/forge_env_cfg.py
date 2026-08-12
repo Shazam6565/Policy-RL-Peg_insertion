@@ -163,6 +163,30 @@ class ForgeTaskPegInsertPolicyACfg(ForgeTaskPegInsertCfg):
 
 
 @configclass
+class ForgeTaskPegInsertPolicyBCfg(ForgeTaskPegInsertCfg):
+    """Policy B ablation: force observations, no force penalty (§12).
+
+    use_early_termination stays at the base False default (same synchronized-timeout
+    resets Policy A trained/evaluated with) for apples-to-apples comparability across
+    the ablation, not the §9.6 experimental variant.
+    """
+
+    use_force_obs: bool = True
+    use_force_penalty: bool = False
+
+
+@configclass
+class ForgeTaskPegInsertPolicyCCfg(ForgeTaskPegInsertCfg):
+    """Policy C ablation: no force observations, force penalty active (§12).
+
+    use_early_termination stays at the base False default — see PolicyBCfg docstring.
+    """
+
+    use_force_obs: bool = False
+    use_force_penalty: bool = True
+
+
+@configclass
 class ForgeTaskPegInsertEarlyTermCfg(ForgeTaskPegInsertCfg):
     """EXPERIMENTAL: force-aware baseline with §9.6 early termination enabled.
 
