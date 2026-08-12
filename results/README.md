@@ -6,15 +6,22 @@ README's "Where things actually live" section).
 
 ```text
 results/
-├── videos/     — policy rollout recordings (playback captures, demo clips)
-├── raw/        — per-episode evaluation CSVs (one row per episode, see project
-│                 doc §11.4 for the schema) — not yet populated, starts once the
-│                 evaluation script (next_10_steps.md step 5) exists
+├── videos/     — policy rollout recordings: playback captures, demo clips, and
+│                 curated success/near-miss close-ups per policy
+├── raw/        — per-episode evaluation CSVs (one row per episode, §11.4 schema),
+│                 one file per (policy, seed, suite) — e.g.
+│                 policy_a_seed44_nominal.csv. This is `evaluate_policy.py`'s
+│                 documented default output location (see its own --help text) —
+│                 point it here, not force_peg_rl/results/raw/, so raw data and the
+│                 code that produced it stay in separate, purpose-matched trees.
 ├── tables/     — aggregated results tables (success rate, force metrics per
-│                 policy/seed) — not yet populated
+│                 policy/seed, mean ± range across seeds) — one markdown file per
+│                 policy/suite, e.g. policy_a_nominal.md
 └── figures/    — plots for the technical report — not yet populated
 ```
 
-Only `videos/` has content so far (`smoke_test_playback.mp4`, from the very first
-baseline PPO smoke test). The other three subfolders get created once Policy A's
-evaluation pipeline exists — see `docs/next_10_steps.md`.
+Populated so far: Policy A's nominal-suite raw CSVs (3 seeds × 500 episodes) and
+their aggregate table (`tables/policy_a_nominal.md`), plus curated success/near-miss
+videos — see `docs/experiment_log.md` and `docs/2026-08-09_next_10_steps.md` for how
+these were produced. `figures/` and the OOD suites' raw/tables entries are still
+open (Week 5 scope).
