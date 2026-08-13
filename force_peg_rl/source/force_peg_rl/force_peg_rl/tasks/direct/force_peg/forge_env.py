@@ -29,6 +29,11 @@ class ForgeEnv(FactoryEnv):
         """Initialize additional randomization and logging tensors."""
         super().__init__(cfg, render_mode, **kwargs)
 
+        # FactoryEnv._set_default_dynamics_parameters() overwrites material
+        # startup events with one constant friction value. Evaluation suites need
+        # a real per-env range, so apply it after the base constructor's overwrite.
+        self.resample_evaluation_friction()
+
         # Success prediction.
         self.success_pred_scale = 0.0
         self.first_pred_success_tx = {}
@@ -76,6 +81,31 @@ class ForgeEnv(FactoryEnv):
         # success-time logging (factory_env.py:81) and resets it itself.
         self.ep_success_latched = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
         self.ep_force_limit_hit = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+
+    def _apply_evaluation_friction(self, asset, friction_range):
+        """Sample static/dynamic friction per env for a named evaluation suite."""
+        if friction_range is None:
+            return
+        low, high = friction_range
+        materials = wp.to_torch(asset.root_view.get_material_properties())
+        values = torch.empty((self.num_envs, 1), device=materials.device).uniform_(low, high)
+        materials[..., 0] = values
+        materials[..., 1] = values
+        env_ids = torch.arange(self.num_envs, device="cpu", dtype=torch.int32)
+        asset.root_view.set_material_properties(wp.from_torch(materials.contiguous()), wp.from_torch(env_ids))
+
+    @staticmethod
+    def _read_asset_friction(asset):
+        """Return mean static friction across an asset's shapes, per env."""
+        materials = wp.to_torch(asset.root_view.get_material_properties())
+        return materials[..., 0].mean(dim=1)
+
+    def resample_evaluation_friction(self):
+        """Apply the configured ranges and cache the actual per-env values."""
+        self._apply_evaluation_friction(self._held_asset, self.cfg.evaluation_peg_friction_range)
+        self._apply_evaluation_friction(self._fixed_asset, self.cfg.evaluation_socket_friction_range)
+        self.evaluation_peg_friction = self._read_asset_friction(self._held_asset)
+        self.evaluation_socket_friction = self._read_asset_friction(self._fixed_asset)
 
     def _compute_intermediate_values(self, dt):
         """Add noise to observations for force sensing."""
@@ -324,16 +354,21 @@ class ForgeEnv(FactoryEnv):
         self.ep_sum_contact_force += contact_force
         self.ep_force_above_threshold_steps += (contact_force >= self.contact_penalty_thresholds).long()
 
-        held_base_pos, _ = factory_utils.get_held_base_pose(
+        held_base_pos, held_base_quat = factory_utils.get_held_base_pose(
             self.held_pos, self.held_quat, self.cfg_task.name, self.cfg_task.fixed_asset_cfg, self.num_envs, self.device
         )
-        target_held_base_pos, _ = factory_utils.get_target_held_base_pose(
-            self.fixed_pos, self.fixed_quat, self.cfg_task.name, self.cfg_task.fixed_asset_cfg, self.num_envs, self.device
+        target_held_base_pos, target_held_base_quat = factory_utils.get_target_held_base_pose(
+            self.fixed_pos,
+            self.fixed_quat,
+            self.cfg_task.name,
+            self.cfg_task.fixed_asset_cfg,
+            self.num_envs,
+            self.device,
         )
         lateral_error = torch.linalg.vector_norm(target_held_base_pos[:, 0:2] - held_base_pos[:, 0:2], dim=1)
         insertion_depth = held_base_pos[:, 2] - target_held_base_pos[:, 2]
-        _, _, curr_yaw = euler_xyz_from_quat(self.fingertip_midpoint_quat)
-        orientation_error = factory_utils.wrap_yaw(curr_yaw)
+        held_quat_rel_target = quat_mul(quat_conjugate(target_held_base_quat), held_base_quat)
+        orientation_error = torch.linalg.vector_norm(axis_angle_from_quat(held_quat_rel_target), dim=1)
 
         if self.cfg.use_early_termination:
             terminated = succeeded | force_limit_exceeded
@@ -366,6 +401,12 @@ class ForgeEnv(FactoryEnv):
         self.extras["eval/orientation_error_final"] = orientation_error
         self.extras["eval/initial_xy_offset"] = self.ep_initial_xy_offset.clone()
         self.extras["eval/initial_orientation_error"] = self.ep_initial_orientation_error.clone()
+        # Snapshot physical parameters before DirectRLEnv resets done envs. Reading
+        # body mass from the evaluation script after env.step() would otherwise see
+        # the newly randomized mass for the *next* episode.
+        self.extras["eval/peg_mass"] = self._held_asset.data.body_mass.torch.sum(dim=-1).clone()
+        self.extras["eval/peg_friction"] = self.evaluation_peg_friction.clone()
+        self.extras["eval/socket_friction"] = self.evaluation_socket_friction.clone()
         self.extras["eval/any_done"] = any_done
 
         return terminated, time_out
@@ -453,18 +494,22 @@ class ForgeEnv(FactoryEnv):
         # initial_orientation_error) — super()._reset_idx() above already called
         # randomize_initial_state(env_ids), so self.held_pos/self.fixed_pos now
         # reflect this new episode's sampled starting pose, not the old one.
-        held_base_pos, _ = factory_utils.get_held_base_pose(
+        held_base_pos, held_base_quat = factory_utils.get_held_base_pose(
             self.held_pos, self.held_quat, self.cfg_task.name, self.cfg_task.fixed_asset_cfg, self.num_envs, self.device
         )
-        target_held_base_pos, _ = factory_utils.get_target_held_base_pose(
-            self.fixed_pos, self.fixed_quat, self.cfg_task.name, self.cfg_task.fixed_asset_cfg, self.num_envs, self.device
+        target_held_base_pos, target_held_base_quat = factory_utils.get_target_held_base_pose(
+            self.fixed_pos,
+            self.fixed_quat,
+            self.cfg_task.name,
+            self.cfg_task.fixed_asset_cfg,
+            self.num_envs,
+            self.device,
         )
-        initial_xy_offset = torch.linalg.vector_norm(
-            target_held_base_pos[:, 0:2] - held_base_pos[:, 0:2], dim=1
-        )
-        _, _, initial_yaw = euler_xyz_from_quat(self.fingertip_midpoint_quat)
+        initial_xy_offset = torch.linalg.vector_norm(target_held_base_pos[:, 0:2] - held_base_pos[:, 0:2], dim=1)
+        held_quat_rel_target = quat_mul(quat_conjugate(target_held_base_quat), held_base_quat)
+        initial_orientation_error = torch.linalg.vector_norm(axis_angle_from_quat(held_quat_rel_target), dim=1)
         self.ep_initial_xy_offset[env_ids] = initial_xy_offset[env_ids]
-        self.ep_initial_orientation_error[env_ids] = factory_utils.wrap_yaw(initial_yaw)[env_ids]
+        self.ep_initial_orientation_error[env_ids] = initial_orientation_error[env_ids]
 
         # Compute initial action for correct EMA computation.
         fixed_pos_action_frame = self.fixed_pos_obs_frame + self.init_fixed_pos_obs_noise

@@ -1,0 +1,51 @@
+# Portfolio pass/fail gates from project §14. These are targets, not claims.
+# Jam/drop gates are intentionally absent until those detectors exist; reporting
+# a guessed zero would be less honest than an explicit instrumentation gap.
+
+nominal:
+  episodes:
+    min: 500
+  success_rate_pct:
+    min: 80.0
+  peak_force_p95_n:
+    max: 50.0
+
+pose_shift:
+  episodes:
+    min: 500
+  success_rate_pct:
+    min: 60.0
+  peak_force_p95_n:
+    max: 50.0
+
+low_friction:
+  episodes:
+    min: 500
+  success_rate_pct:
+    min: 60.0
+  peak_force_p95_n:
+    max: 50.0
+
+high_friction:
+  episodes:
+    min: 500
+  success_rate_pct:
+    min: 60.0
+  peak_force_p95_n:
+    max: 50.0
+
+mass_shift:
+  episodes:
+    min: 500
+  success_rate_pct:
+    min: 60.0
+  peak_force_p95_n:
+    max: 50.0
+
+combined_ood:
+  episodes:
+    min: 1000
+  success_rate_pct:
+    min: 60.0
+  peak_force_p95_n:
+    max: 50.0

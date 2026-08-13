@@ -42,8 +42,8 @@ Example:
     python scripts/evaluate_policy.py \\
         --task Shaurya-ForcePegInsert-PolicyA-Direct-v0 \\
         --checkpoint logs/rl_games/Forge/<run>/nn/Forge.pth \\
-        --suite nominal \\
-        --output results/raw/policy_a_seed_0_nominal.csv
+        --suite combined_ood \\
+        --output results/raw/policy_a_seed_0_combined_ood.csv
 
 ``episodes`` and ``seeds`` come from configs/evaluation_suites.yaml for the named
 suite; ``--episodes`` / ``--seeds`` override them for quick smoke runs.
@@ -53,11 +53,15 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import sys
 
 import torch
 import yaml
+
+from evaluation_config import apply_suite_to_env_cfg, load_named_yaml, validate_suite
+from evaluation_results import grade_summary, summarize_rows
 
 # -- argparse (kept minimal; simulator/launcher args added below) -------------
 parser = argparse.ArgumentParser(description="Deterministic policy evaluation (§17).")
@@ -67,8 +71,7 @@ parser.add_argument(
     "--suite",
     type=str,
     default="nominal",
-    help="Evaluation suite name from configs/evaluation_suites.yaml (§11.3). Only 'nominal' "
-    "(fixed seeds, no randomization) is implemented so far — the OOD suites are Week 5 scope.",
+    help="Evaluation suite name from configs/evaluation_suites.yaml (§11.3).",
 )
 parser.add_argument(
     "--episodes",
@@ -98,17 +101,14 @@ from isaaclab_tasks.utils import launch_simulation, resolve_task_config  # noqa:
 
 import force_peg_rl.tasks  # noqa: F401,E402
 
-
 EVAL_SUITES_PATH = os.path.join(os.path.dirname(__file__), "..", "configs", "evaluation_suites.yaml")
+EVAL_RUBRIC_PATH = os.path.join(os.path.dirname(__file__), "..", "configs", "evaluation_rubric.yaml")
 
 
 def load_suite(suite_name: str) -> dict:
     """Load a named suite from configs/evaluation_suites.yaml (§11.3)."""
-    with open(EVAL_SUITES_PATH) as f:
-        suites = yaml.safe_load(f)
-    if suite_name not in suites:
-        raise ValueError(f"Unknown evaluation suite {suite_name!r}. Available: {list(suites)}")
-    return suites[suite_name]
+    suite = load_named_yaml(EVAL_SUITES_PATH, suite_name, kind="evaluation suite")
+    return validate_suite(suite_name, suite)
 
 
 def read_friction(asset) -> torch.Tensor:
@@ -142,11 +142,6 @@ def main():
         import math
 
         suite = load_suite(args_cli.suite)
-        if args_cli.suite != "nominal":
-            raise NotImplementedError(
-                f"Suite {args_cli.suite!r} requires randomized pose/friction/mass overrides not yet wired into "
-                "this script (next_10_steps.md scopes only 'nominal' for this step; OOD suites are Week 5)."
-            )
 
         # The suite file is authoritative (§11.3); CLI flags are explicit overrides.
         total_episodes = args_cli.episodes if args_cli.episodes is not None else suite["episodes"]
@@ -159,6 +154,7 @@ def main():
 
         env_cfg.scene.num_envs = args_cli.num_envs
         env_cfg.seed = seeds[0]
+        apply_suite_to_env_cfg(env_cfg, suite)
 
         resume_path = retrieve_file_path(args_cli.checkpoint)
         run_dir = os.path.dirname(os.path.dirname(resume_path))  # .../nn/x.pth -> run dir
@@ -182,7 +178,8 @@ def main():
         env = RlGamesVecEnvWrapper(env, rl_device, clip_obs, clip_actions, obs_groups, concate_obs_groups)
 
         vecenv.register(
-            "IsaacRlgWrapper", lambda config_name, num_actors, **kwargs: RlGamesGpuEnv(config_name, num_actors, **kwargs)
+            "IsaacRlgWrapper",
+            lambda config_name, num_actors, **kwargs: RlGamesGpuEnv(config_name, num_actors, **kwargs),
         )
         env_configurations.register("rlgpu", {"vecenv_type": "IsaacRlgWrapper", "env_creator": lambda **kwargs: env})
 
@@ -213,8 +210,12 @@ def main():
         for seed, seed_budget in zip(seeds, episodes_per_seed):
             if seed_budget == 0:
                 continue
-            # Re-seed and reset so each batch is an independent deterministic block.
+            # Re-seed pose/mass resets and re-sample startup-style friction so each
+            # batch is an independent deterministic block rather than all three
+            # suite seeds sharing the first batch's per-env friction assignment.
             env.seed(seed)
+            if hasattr(unwrapped, "resample_evaluation_friction"):
+                unwrapped.resample_evaluation_friction()
             obs = env.reset()
             if isinstance(obs, dict):
                 obs = obs["obs"]
@@ -247,11 +248,20 @@ def main():
 
                     done_ids = any_done.nonzero(as_tuple=False).squeeze(-1).tolist()
                     if done_ids:
-                        # Hoisted out of the per-row loop: each of these is a full
-                        # per-env tensor fetch, identical for every row in this step.
-                        peg_mass_all = held_asset.data.body_mass.torch.sum(dim=-1) if held_asset else None
-                        peg_friction_all = read_friction(held_asset) if held_asset else None
-                        socket_friction_all = read_friction(fixed_asset) if fixed_asset else None
+                        # Prefer the environment's pre-reset snapshot. DirectRLEnv
+                        # resets done envs before env.step() returns, so a live mass
+                        # read here can belong to the next episode.
+                        peg_mass_all = extras.get("eval/peg_mass")
+                        peg_friction_all = extras.get("eval/peg_friction")
+                        socket_friction_all = extras.get("eval/socket_friction")
+                        # Compatibility fallback for baseline tasks/checkpoints that
+                        # predate the eval/* physical-parameter snapshots.
+                        if peg_mass_all is None and held_asset:
+                            peg_mass_all = held_asset.data.body_mass.torch.sum(dim=-1)
+                        if peg_friction_all is None and held_asset:
+                            peg_friction_all = read_friction(held_asset)
+                        if socket_friction_all is None and fixed_asset:
+                            socket_friction_all = read_friction(fixed_asset)
                     for i in done_ids:
                         if seed_rows >= seed_budget:
                             break
@@ -295,13 +305,13 @@ def main():
         # quickReleaseFrameworkAndTerminate, which terminates the process immediately.
         # Any code placed after the `with` block silently never runs — the script exits
         # 0 with no traceback and no output file.
-        _write_results(rows)
+        _write_results(rows, suite)
 
         env.close()
 
 
-def _write_results(rows: list[dict]):
-    """Write the per-episode CSV and print the §17 aggregate summary."""
+def _write_results(rows: list[dict], suite: dict):
+    """Write the per-episode CSV, JSON summary, and rubric decision."""
     if not rows:
         print("[WARN] No episodes completed — nothing to write.")
         return
@@ -313,24 +323,33 @@ def _write_results(rows: list[dict]):
         writer.writeheader()
         writer.writerows(rows)
 
-    n = len(rows)
-    success_rate = sum(r["success"] for r in rows) / n * 100
-    median_steps = sorted(r["episode_steps"] for r in rows)[n // 2]
-    forces = sorted(r["max_contact_force"] for r in rows)
-    # Linear-interpolated p95 (numpy's default method) rather than a truncated index,
-    # which at small n lands well below the true 95th percentile.
-    pos = 0.95 * (n - 1)
-    lo, frac = int(pos), pos - int(pos)
-    p95_force = forces[lo] + frac * (forces[min(lo + 1, n - 1)] - forces[lo])
-    force_limit_rate = sum(r["termination_reason"] == "force_limit" for r in rows) / n * 100
+    summary = summarize_rows(rows)
+    rubric = load_named_yaml(EVAL_RUBRIC_PATH, args_cli.suite, kind="evaluation rubric")
+    grade = grade_summary(summary, rubric)
+    summary_document = {
+        "evaluation_suite": args_cli.suite,
+        "conditions": suite["conditions"],
+        "summary": summary,
+        "rubric": grade,
+        "known_metric_gaps": [
+            "jam and drop rates are not graded because their detectors are not implemented",
+            "force_limit_label_rate_pct excludes successful episodes that also crossed the force limit because success has label priority",
+        ],
+    }
+    summary_path = os.path.splitext(args_cli.output)[0] + ".summary.json"
+    with open(summary_path, "w") as f:
+        json.dump(summary_document, f, indent=2)
+        f.write("\n")
 
     print(f"Evaluation suite: {args_cli.suite}")
-    print(f"Episodes: {n}")
-    print(f"Success rate: {success_rate:.1f}%")
-    print(f"Median completion steps: {median_steps}")
-    print(f"Peak-force p95: {p95_force:.1f} N")
-    print(f"Force-limit termination rate: {force_limit_rate:.1f}%")
+    print(f"Episodes: {summary['episodes']}")
+    print(f"Success rate: {summary['success_rate_pct']:.1f}%")
+    print(f"Median completion steps: {summary['median_completion_steps']:g}")
+    print(f"Peak-force p95: {summary['peak_force_p95_n']:.1f} N")
+    print(f"Force-limit label rate: {summary['force_limit_label_rate_pct']:.1f}%")
+    print(f"Rubric: {'PASS' if grade['passed'] else 'FAIL'}")
     print(f"Wrote: {args_cli.output}")
+    print(f"Wrote: {summary_path}")
 
 
 if __name__ == "__main__":
