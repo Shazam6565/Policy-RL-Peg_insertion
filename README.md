@@ -16,14 +16,15 @@ This README is the map; that file is the spec.
 
 ## Status
 
-Week 3–4 of the [six-week plan](force_aware_peg_insertion_project.md#20-six-week-execution-plan).
+Week 5 of the [six-week plan](force_aware_peg_insertion_project.md#20-six-week-execution-plan).
 Done so far: environment installed and verified, the official `Isaac-Forge-PegInsert-Direct-v0`
 baseline reproduced, forked into our own external project (`force_peg_rl/`) and proven
 **bit-identical** to upstream under the same seed, per-component reward logging verified live
 in TensorBoard, and **Policy A (geometry-only ablation) fully trained and evaluated** — 3 seeds,
 7.3% nominal success rate (range 6.4–7.8%), see
-[`results/tables/policy_a_nominal.md`](results/tables/policy_a_nominal.md). Not yet started:
-Policy B, C, D (registered/smoke-tested next) and the technical report.
+[`results/tables/policy_a_nominal.md`](results/tables/policy_a_nominal.md). Policy B's first two
+seeds finished near 31% trailing-20 training success; seed 2 was still running when the
+2026-08-13 run analysis was captured. Policies C/D and the technical report remain.
 
 See [`docs/experiment_log.md`](docs/experiment_log.md) for the dated, running account of what
 was actually done and observed each session, and [`docs/next_10_steps.md`](docs/next_10_steps.md)
@@ -117,11 +118,37 @@ context you need is which task ID to pass: `Shaurya-ForcePegInsert-Direct-v0`.
 
 ---
 
+## Deterministic evaluation
+
+`force_peg_rl/configs/evaluation_suites.yaml` defines six reproducible suites: `nominal`,
+`pose_shift`, `low_friction`, `high_friction`, `mass_shift`, and `combined_ood`. Every suite
+pins its episode count, batch seeds, initial-pose range, peg/socket friction range, and peg-mass
+range so training defaults cannot silently change the evaluation distribution.
+
+```bash
+python force_peg_rl/scripts/evaluate_policy.py \
+  --task Shaurya-ForcePegInsert-PolicyB-Direct-v0 \
+  --checkpoint force_peg_rl/logs/rl_games/Forge/<run>/nn/Forge.pth \
+  --suite combined_ood \
+  --output results/raw/policy_b_seed_0_combined_ood.csv \
+  --headless
+```
+
+Each run writes the §11.4 episode-level CSV and a sibling `.summary.json` containing aggregate
+metrics plus a machine-readable PASS/FAIL decision from
+`force_peg_rl/configs/evaluation_rubric.yaml`. The rubric implements the §14 targets (80%
+nominal success, 60% combined-OOD success, and peak-force p95 no greater than the 50 N hard
+limit). Jam/drop gates remain explicitly ungraded until their detectors exist.
+
+---
+
 ## Results
 
-Policy A has real, measured numbers as of 2026-08-12; B, C, and D are not trained yet. Per the
-project doc's own rule: *"Do not fill the table with expected values. Only report measured
-results"* — so those rows stay `TBD`, not filled with guesses.
+Policy A has real, measured evaluation numbers as of 2026-08-12. Policy B's first two training
+runs finished on 2026-08-13, but they have not yet run through the held-out evaluator; Policies C
+and D have not completed real training. Per the project doc's own rule: *"Do not fill the table
+with expected values. Only report measured results"* — those cells stay `TBD`, not filled with
+training-curve proxies or guesses.
 
 | Policy | Force Obs. | Force Penalty | Nominal Success | OOD Success | Peak Force p95 | Jam Rate |
 |---|---:|---:|---:|---:|---:|---:|

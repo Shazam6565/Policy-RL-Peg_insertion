@@ -5,6 +5,62 @@ design, distinct from the final technical report. Newest entry on top.
 
 ---
 
+## 2026-08-13 — Built the deterministic OOD evaluation and grading suite
+
+Closed the most tractable gap from the Agility Robotics role analysis: held-out evaluation under
+distribution shift. `configs/evaluation_suites.yaml` now defines nominal, pose-shift, low/high
+friction, mass-shift, and combined-OOD suites with explicit seeds and complete pose/dynamics
+conditions. The evaluator applies the named suite before environment creation, retains the existing
+20-column per-episode CSV, and adds a sibling JSON summary with a machine-readable rubric result.
+The rubric directly encodes the project targets: at least 80% nominal success, at least 60%
+success on each OOD suite, the full episode budget, and peak-force p95 at or below the 50 N hard
+limit. Jam/drop are deliberately not graded because their detectors still do not exist.
+
+Two correctness issues surfaced while wiring the new suites:
+
+- Factory's constructor overwrites the startup material-randomization events with one constant
+  friction value. Evaluation friction is therefore applied per environment *after* that overwrite;
+  changing the old startup event alone would have produced a convincing config file with no effect.
+- `DirectRLEnv.step()` resets completed environments before returning. Reading peg mass from the
+  evaluator after `step()` would log the next episode's newly randomized mass. Mass and friction are
+  now snapshotted into `extras` with the existing force/pose telemetry before reset.
+
+Also corrected `orientation_error_final` and `initial_orientation_error`: both previously logged
+absolute fingertip yaw. They now measure the axis-angle magnitude of the held asset relative to the
+socket, which is the quantity the schema actually names.
+
+Local, simulator-independent checks cover every suite, config application, aggregate statistics,
+and rubric grading. Full Isaac Sim evaluation still needs to run on the project GPU environment.
+
+---
+
+## 2026-08-13 — Policy B run forensics captured before the details decay
+
+The first two real Policy B seeds finished with trailing-20 success rates of 31.85% (seed 0) and
+30.31% (seed 1), a 1.54 percentage-point endpoint spread despite seed 1 leading by as much as
+4.7 points mid-run. Seed 2 was still in progress when this note was captured.
+
+Four findings change how the campaign must be interpreted:
+
+1. Shared `logs/rl_games/Forge/` discovery mixed unrelated same-day runs whose epoch counters all
+   restart at 1, allowing later files to overwrite real metrics by epoch key. Run directories must
+   be explicitly safelisted.
+2. TensorBoard tags use two x axes: rewards/episode metrics are epoch-indexed, performance metrics
+   are frame-indexed, and `info/epochs` is the authoritative frame-to-epoch mapping.
+3. The apparent reward collapses at epoch 302 (seed 0) and 269 (seed 1) are the
+   `success_pred_scale` latch turning on once mean success first crosses 25%. The new penalty is
+   approximately 0.565 per step × 149 steps ≈ 84 reward per episode, matching the observed cliff.
+   Raw reward is therefore not comparable across runs whose latch fires at different epochs.
+4. RL-Games only overwrites `Forge.pth` when mean reward beats the stored best. Because the latch
+   permanently changes reward scale, seed 0's file froze at epoch 268 and held a policy roughly ten
+   success-rate points worse than the final policy. Final and periodic checkpoints must be evaluated
+   explicitly rather than trusting the filename `Forge.pth`.
+
+Seed 0's real launch also differed from the checked-in YAML (`num_actors=512`,
+`minibatch_size=2048`, `max_epochs=500`; the file said 128/512/200). Those effective values came
+from shell history, so subsequent seeds were launched with explicit overrides. The run's own
+`params/env.yaml` is authoritative for the seed; a dashboard label that said 42 was wrong.
+
 ## 2026-08-12 — Closed out Week 4 setup: all four policies ready for real training
 
 Item 10, wrapping up `docs/2026-08-09_next_10_steps.md` (items 6–9 done this session,

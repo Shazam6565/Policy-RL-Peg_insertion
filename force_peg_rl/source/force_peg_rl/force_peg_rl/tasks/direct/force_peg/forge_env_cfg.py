@@ -101,6 +101,12 @@ class ForgeEnvCfg(FactoryEnvCfg):
 
     ft_smoothing_factor: float = 0.25
 
+    # Optional deterministic-evaluation overrides. FactoryEnv applies constant
+    # task friction after startup events, so ForgeEnv must apply these ranges
+    # after FactoryEnv.__init__ completes. None preserves normal training behavior.
+    evaluation_peg_friction_range: tuple[float, float] | None = None
+    evaluation_socket_friction_range: tuple[float, float] | None = None
+
     # Ablation toggles (Policy A-D, see force_aware_peg_insertion_project.md §12).
     # Both default True so Shaurya-ForcePegInsert-Direct-v0's behavior is unchanged.
     use_force_obs: bool = True

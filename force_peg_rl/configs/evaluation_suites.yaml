@@ -1,31 +1,67 @@
-# Evaluation suites (project doc §11.3). Only `nominal` is implemented so far —
-# per next_10_steps.md step 6, the randomized OOD suites (pose_shift, low/high_friction,
-# mass_shift, combined_ood) are deferred to Week 5's robustness pass and are not
-# yet wired into scripts/evaluate_policy.py.
+# Deterministic evaluation suites (project doc §11.3).
+#
+# Every suite explicitly defines every condition. This prevents an Isaac Lab or
+# training-config default from silently changing the evaluation distribution.
+# Pose ranges are symmetric because Factory samples them as +/- an amplitude.
+# The nominal pose ranges match the training task's hand-pose distribution; its
+# dynamics are fixed at the asset defaults. OOD ranges extend beyond nominal.
 
 nominal:
   episodes: 500
   seeds: [1000, 1001, 1002]
+  conditions:
+    initial_xy_offset_range_m: [-0.020, 0.020]
+    initial_yaw_error_range_deg: [-45.0, 45.0]
+    peg_friction_range: [0.75, 0.75]
+    socket_friction_range: [0.75, 0.75]
+    peg_mass_scale_range: [1.0, 1.0]
 
-# --- Not yet implemented (Week 5) ---------------------------------------------
-# pose_shift:
-#   episodes: 500
-#   xy_offset_range: [-0.012, 0.012]
-#   yaw_range_deg: [-12, 12]
-#
-# low_friction:
-#   episodes: 500
-#   peg_friction_range: [0.2, 0.4]
-#
-# high_friction:
-#   episodes: 500
-#   peg_friction_range: [0.9, 1.2]
-#
-# mass_shift:
-#   episodes: 500
-#   mass_scale_range: [0.6, 1.5]
-#
-# combined_ood:
-#   episodes: 1000
-#   wider_pose_range: true
-#   wider_dynamics_range: true
+pose_shift:
+  episodes: 500
+  seeds: [1000, 1001, 1002]
+  conditions:
+    initial_xy_offset_range_m: [-0.030, 0.030]
+    initial_yaw_error_range_deg: [-60.0, 60.0]
+    peg_friction_range: [0.75, 0.75]
+    socket_friction_range: [0.75, 0.75]
+    peg_mass_scale_range: [1.0, 1.0]
+
+low_friction:
+  episodes: 500
+  seeds: [1000, 1001, 1002]
+  conditions:
+    initial_xy_offset_range_m: [-0.020, 0.020]
+    initial_yaw_error_range_deg: [-45.0, 45.0]
+    peg_friction_range: [0.20, 0.40]
+    socket_friction_range: [0.20, 0.40]
+    peg_mass_scale_range: [1.0, 1.0]
+
+high_friction:
+  episodes: 500
+  seeds: [1000, 1001, 1002]
+  conditions:
+    initial_xy_offset_range_m: [-0.020, 0.020]
+    initial_yaw_error_range_deg: [-45.0, 45.0]
+    peg_friction_range: [0.90, 1.20]
+    socket_friction_range: [0.90, 1.20]
+    peg_mass_scale_range: [1.0, 1.0]
+
+mass_shift:
+  episodes: 500
+  seeds: [1000, 1001, 1002]
+  conditions:
+    initial_xy_offset_range_m: [-0.020, 0.020]
+    initial_yaw_error_range_deg: [-45.0, 45.0]
+    peg_friction_range: [0.75, 0.75]
+    socket_friction_range: [0.75, 0.75]
+    peg_mass_scale_range: [0.60, 1.50]
+
+combined_ood:
+  episodes: 1000
+  seeds: [1000, 1001, 1002]
+  conditions:
+    initial_xy_offset_range_m: [-0.035, 0.035]
+    initial_yaw_error_range_deg: [-70.0, 70.0]
+    peg_friction_range: [0.20, 1.20]
+    socket_friction_range: [0.20, 1.20]
+    peg_mass_scale_range: [0.50, 1.70]
