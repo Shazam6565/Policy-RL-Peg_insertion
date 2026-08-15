@@ -20,10 +20,13 @@ Week 3–4 of the [six-week plan](force_aware_peg_insertion_project.md#20-six-we
 Done so far: environment installed and verified, the official `Isaac-Forge-PegInsert-Direct-v0`
 baseline reproduced, forked into our own external project (`force_peg_rl/`) and proven
 **bit-identical** to upstream under the same seed, per-component reward logging verified live
-in TensorBoard, and **Policy A (geometry-only ablation) fully trained and evaluated** — 3 seeds,
+in TensorBoard, **Policy A (geometry-only ablation) fully trained and evaluated** — 3 seeds,
 7.3% nominal success rate (range 6.4–7.8%), see
-[`results/tables/policy_a_nominal.md`](results/tables/policy_a_nominal.md). Not yet started:
-Policy B, C, D (registered/smoke-tested next) and the technical report.
+[`results/tables/policy_a_nominal.md`](results/tables/policy_a_nominal.md) — and **Policy B
+(force observations, no force penalty) fully trained and evaluated** — 3 seeds, 14.2% nominal
+success rate (range 9.6–17.2%), see
+[`results/tables/policy_b_nominal.md`](results/tables/policy_b_nominal.md). Not yet started:
+Policy C, D (registered/smoke-tested, queued next) and the technical report.
 
 See [`docs/experiment_log.md`](docs/experiment_log.md) for the dated, running account of what
 was actually done and observed each session, and [`docs/next_10_steps.md`](docs/next_10_steps.md)
@@ -119,14 +122,14 @@ context you need is which task ID to pass: `Shaurya-ForcePegInsert-Direct-v0`.
 
 ## Results
 
-Policy A has real, measured numbers as of 2026-08-12; B, C, and D are not trained yet. Per the
-project doc's own rule: *"Do not fill the table with expected values. Only report measured
+Policy A and B have real, measured numbers as of 2026-08-14; C and D are not trained yet. Per
+the project doc's own rule: *"Do not fill the table with expected values. Only report measured
 results"* — so those rows stay `TBD`, not filled with guesses.
 
 | Policy | Force Obs. | Force Penalty | Nominal Success | OOD Success | Peak Force p95 | Jam Rate |
 |---|---:|---:|---:|---:|---:|---:|
 | A: Geometry baseline | No | No | 7.3% (6.4–7.8%, n=3 seeds) | TBD | 37.2 N | TBD (not instrumented) |
-| B: Force observation | Yes | No | TBD | TBD | TBD | TBD |
+| B: Force observation | Yes | No | 14.2% (9.6–17.2%, n=3 seeds) | TBD | 34.7 N | TBD (not instrumented) |
 | C: Force penalty | No | Yes | TBD | TBD | TBD | TBD |
 | D: Force-aware | Yes | Yes | TBD | TBD | TBD | TBD |
 
@@ -134,15 +137,25 @@ Per-seed breakdown, caveats (episodes never terminate early, so "force-limit rat
 incidence rate not a true termination rate; jam rate has no detection instrumentation at all
 yet), and the raw per-episode CSVs are in
 [`results/tables/policy_a_nominal.md`](results/tables/policy_a_nominal.md) /
+[`results/tables/policy_b_nominal.md`](results/tables/policy_b_nominal.md) /
 [`results/raw/`](results/raw/).
 
-Representative videos, Policy A / seed 44 — a clean success and a genuine near-miss (GIFs, so
-they play inline; full-quality `.mp4` source for each is linked underneath):
+Representative videos — a clean success and a genuine near-miss for each trained policy (GIFs,
+so they play inline; full-quality `.mp4` source for each is linked underneath):
+
+**Policy A / seed 44**
 
 | Success | Near-miss |
 |---|---|
 | ![Success close-up](results/videos/policy_a_seed44_success_closeup.gif) | ![Near-miss close-up](results/videos/policy_a_seed44_nearmiss_closeup.gif) |
 | [.mp4 source](results/videos/policy_a_seed44_success_closeup.mp4) | [.mp4 source](results/videos/policy_a_seed44_nearmiss_closeup.mp4) |
+
+**Policy B / seed 0**
+
+| Success | Near-miss |
+|---|---|
+| ![Success close-up](results/videos/policy_b_seed0_success_closeup.gif) | ![Near-miss close-up](results/videos/policy_b_seed0_nearmiss_closeup.gif) |
+| [.mp4 source](results/videos/policy_b_seed0_success_closeup.mp4) | [.mp4 source](results/videos/policy_b_seed0_nearmiss_closeup.mp4) |
 
 ---
 

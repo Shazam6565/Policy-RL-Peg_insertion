@@ -20,8 +20,9 @@ results/
 └── figures/    — plots for the technical report — not yet populated
 ```
 
-Populated so far: Policy A's nominal-suite raw CSVs (3 seeds × 500 episodes) and
-their aggregate table (`tables/policy_a_nominal.md`), plus curated success/near-miss
-videos — see `docs/experiment_log.md` and `docs/2026-08-09_next_10_steps.md` for how
-these were produced. `figures/` and the OOD suites' raw/tables entries are still
-open (Week 5 scope).
+Populated so far: Policy A and Policy B's nominal-suite raw CSVs (3 seeds × 500
+episodes each) and their aggregate tables (`tables/policy_a_nominal.md`,
+`tables/policy_b_nominal.md`), plus curated success/near-miss videos for both —
+see `docs/experiment_log.md` and `docs/2026-08-09_next_10_steps.md` for how these
+were produced. `figures/`, Policy C/D's raw/tables entries, and the OOD suites are
+still open (Week 5 / remainder-of-batch scope).

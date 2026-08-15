@@ -5,6 +5,78 @@ design, distinct from the final technical report. Newest entry on top.
 
 ---
 
+## 2026-08-14 — Policy B: real §22 evaluation results, curated close-up videos
+
+Policy B's 3-seed training batch (`use_force_obs=True, use_force_penalty=False`,
+task `Shaurya-ForcePegInsert-PolicyB-Direct-v0`) finished and was evaluated against
+the `nominal` suite the same way as Policy A: 500 deterministic episodes/checkpoint,
+fixed seeds `[1000, 1001, 1002]`, `is_deterministic=True`, 64 envs, checkpoints being
+each seed's own `last_Forge_ep_500_*.pth`.
+
+| Seed | Success rate | Median steps | Peak force p95 | Force-limit rate |
+|---|---|---|---|---|
+| 0 | 17.2% | 149 | 31.2 N | 1.2% |
+| 1 | 15.8% | 149 | 35.6 N | 0.8% |
+| 2 | 9.6% | 149 | 37.2 N | 1.0% |
+| **mean (range)** | **14.2% (9.6–17.2%)** | 149 | 34.7 N (31.2–37.2) | 1.0% (0.8–1.2%) |
+
+**Roughly double Policy A's real success rate (7.3% mean, `policy_a_nominal.md`)
+at comparable-to-slightly-lower peak contact force** — the expected direction for
+restoring force observations to the actor, now measured rather than assumed.
+**Seed 2 is a real outlier worth flagging, not a data error**: it had the *highest*
+final training reward of the three seeds (170.6 vs 132.6 / 141.4) but the *lowest*
+evaluated success and the *highest* force figures — training-time reward and
+deterministic nominal-suite success don't always rank the same way across seeds,
+same caveat already on record for Policy A's training-vs-eval gap. CSVs written to
+`results/raw/policy_b_seed{0,1,2}_nominal.csv`; aggregate table (with full caveats,
+same structure as Policy A's) written to `results/tables/policy_b_nominal.md`.
+
+**Recorded close-up success/near-miss videos** using the same recipe developed for
+Policy A (2026-08-12 entry below): re-run the checkpoint's own deterministic
+`nominal`-suite seed-1000 batch (`num_envs=64`) through `play_rl_games.py --video`,
+camera parked on one env's origin. Picked envs from the already-collected seed-0
+eval CSV's first 64 rows (episode-seed-1000 batch, envs 0–63 in row order) instead
+of re-scanning blind: **env 11** for the success clip (`final_insertion_depth ≈
+7.5e-5`, `lateral_error_final ≈ 1.0e-4`, `max_contact_force = 10.6 N` — the cleanest
+of the batch's 26 successes) and **env 41** for the near-miss (`termination_reason
+= timeout` despite `final_insertion_depth ≈ 0.00157`, `max_contact_force = 18.3 N`
+— same razor-thin-margin pattern as Policy A's near-miss).
+
+**The exact `viewer.eye`/`viewer.lookat` numbers logged for Policy A's camera
+(`eye = origin + (1.0, -0.85, 0.65)`, `lookat = origin + (0.5, 0.0, 0.15)`) did not
+reproduce that framing here.** Passed as Hydra CLI overrides
+(`env.viewer.origin_type=env env.viewer.env_index=<N> env.viewer.eye=[...]
+env.viewer.lookat=[...]`) — confirmed via a Kit-free `resolve_task_config()` dump
+that the override values really do land on `env_cfg.viewer` unchanged, and a
+sanity check with `origin_type=world eye=[20,20,20]` proved the override path
+drives the actual rendered frame (full 8×8 env grid, as expected) — so the
+mechanism itself is sound. But at Policy A's stated numbers, and at several
+scaled/re-aimed variants tried afterward, the rendered frame kept showing a wide
+3-4-table view rather than the tight single-table framing in the committed Policy A
+videos, including one attempt that moved the eye let it dip below table height
+entirely. Landed on `eye = origin + (0.5, -0.5, 1.1)`, `lookat = origin + (0.15,
+0.0, 0.55)` by iterating on quick 10-step-video test renders and inspecting
+extracted frames directly — clearly shows the gripper, peg, and the socket's
+mounting plate, just from a slightly wider angle than Policy A's own clips.
+Genuinely unresolved: whether Policy A's committed video used some additional
+undocumented adjustment beyond what its own write-up states, or whether the two
+sessions' camera math differs for a reason not yet found. Not chased further
+before to avoid burning as much time as the same investigation on the previous
+Policy A used up, given the deterministic-frame check confirmed correctness.
+
+Videos: `force_peg_rl/logs/rl_games/Forge/2026-08-12_12-10-32/videos/play/closeup-{success,nearmiss}-step-0.mp4`
+(gitignored run directory), copied into the tracked tree as
+`results/videos/policy_b_seed0_{success,nearmiss}_closeup.mp4`, with matching
+480px/12fps palette-optimized `.gif` previews generated the same way as Policy A's
+(`ffmpeg`'s bundled `imageio_ffmpeg` binary inside the `env_isaaclab` venv — no
+system `ffmpeg` install on this machine).
+
+**Next:** Policy C and D still need their own 3-seed training + evaluation batches
+(6 of the planned 9 runs remain) before the full §22 table and cross-policy
+comparison can be written.
+
+---
+
 ## 2026-08-12 — Closed out Week 4 setup: all four policies ready for real training
 
 Item 10, wrapping up `docs/2026-08-09_next_10_steps.md` (items 6–9 done this session,
