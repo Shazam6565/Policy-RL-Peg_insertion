@@ -5,6 +5,170 @@ design, distinct from the final technical report. Newest entry on top.
 
 ---
 
+## 2026-08-18 — Policy D: 3-seed training complete, real §22 evaluation results, 9-run batch closed out
+
+Policy D's 3-seed training batch (`use_force_obs=True, use_force_penalty=True`,
+task `Shaurya-ForcePegInsert-Direct-v0` — the pre-existing default task, no new
+registration needed) finished all 500 epochs/seed on this box (`bas-zeus`),
+launched via `systemd-run --user --scope --collect` per seed to survive
+session restarts (see `feedback_background_task_resilience` memory). Seed 0:
+run dir `2026-08-16_21-49-29`, finished cleanly 2026-08-17 10:54 ("MAX EPOCHS
+NUM!", 47113s training time). Seed 1: `2026-08-17_10-55-26`, finished cleanly
+2026-08-17 23:48 (46352s). Seed 2: `2026-08-17_23-48-36`, finished cleanly
+2026-08-18 12:41 (46375.83s).
+
+**Training-time numbers, 500 epochs/seed:**
+
+| Seed | Final reward | Best reward | Final-20 success | Peak success |
+|---|---|---|---|---|
+| 0 | 73.8 | 120.2 @ 422 | 24.38% | 27.73% @ 481 |
+| 1 | 101.2 | 119.1 @ 441 | 16.59% | 20.51% @ 441 |
+| 2 | 103.9 | 121.7 @ 387 | 25.34% | 30.86% @ 487 |
+
+**By far the strongest training-time trajectory of any policy in the whole
+B/C/D batch** — every Policy D seed reached double-digit final-20 success,
+and seeds 0 and 2 both exceeded 24%, well above anything Policy C managed
+and above most of Policy B's seeds too. This is exactly the direction the
+force-observation hypothesis predicts for the fully force-aware
+configuration.
+
+**Step — real evaluation, not the training curve.** Ran
+`scripts/evaluate_policy.py` against all three checkpoints' `nn/Forge.pth`,
+`nominal` suite (500 deterministic episodes/checkpoint, fixed seeds
+`[1000, 1001, 1002]`, `is_deterministic=True`, 64 envs), launched
+sequentially via `systemd-run --user --scope --collect
+--unit=policyd-eval-seed{0,1,2}` immediately after seed 2's training
+finished:
+
+| Seed | Success rate | Median steps | Peak force p95 | Force-limit rate |
+|---|---|---|---|---|
+| 0 | 10.8% | 149 | 19.1 N | 0.2% |
+| 1 | 9.2% | 149 | 18.3 N | 0.0% |
+| 2 | 9.8% | 149 | 18.8 N | 0.0% |
+| **mean (range)** | **9.9% (9.2–10.8%)** | 149 | 18.8 N (18.3–19.1) | 0.1% (0.0–0.2%) |
+
+**A genuine surprise: the best training-time policy does not evaluate as the
+best policy overall.** Despite training-time success rates 2–3x higher than
+any Policy B seed, Policy D's deterministic nominal success (9.9% mean)
+comes in *below* Policy B (14.2%) — though still above Policy C (3.4%) and
+the geometry-only baseline (7.3%). What Policy D unambiguously wins on is
+contact force: 18.8 N mean p95, the lowest of any force-aware policy and
+well below Policy B's 34.7 N, with two of three seeds at exactly 0.0%
+force-limit incidence. Success is also far more evenly distributed across
+seeds (9.2–10.8%, a 1.6-point spread) than Policy C's near-total
+seed-dependence (0.0–10.2%) — having the observation available means every
+seed learns *some* transferable contact behavior, even if the penalty
+trades away some of the raw success rate Policy B achieves without it.
+CSVs written to `results/raw/policy_d_seed{0,1,2}_nominal.csv`; aggregate
+table (with full caveats, same structure as Policy A/B/C's) written to
+`results/tables/policy_d_nominal.md`.
+
+**The 9-run batch (B, C, D × 3 seeds, plus the earlier Policy A batch) is now
+fully closed out.** Combined §22 results table across all four policies:
+`results/tables/all_policies_nominal.md`. Headline finding: force
+*observation* is the factor that lets the policy learn the task at all
+(Policy B roughly doubles the baseline); the force *penalty* alone, without
+the observation, actively hurts (Policy C falls below baseline); combining
+both (Policy D) does not simply stack B's success gain with C's force
+reduction — it lands between the baseline and Policy B on success while
+achieving the lowest peak force of any force-aware policy. The two effects
+are not additive, and training-time success is not a reliable stand-in for
+deterministic nominal-suite evaluation on this task — a caveat first seen
+sharply in Policy C's seeds and now confirmed even more starkly by Policy D's.
+
+**Recorded close-up success/near-miss videos for both Policy C and Policy
+D** — Policy C's had been deferred until Policy D was also done. Same
+recipe as Policy A/B (`play_rl_games.py --video`, `num_envs=64`, camera
+parked on one env's origin via `env.viewer.origin_type=env
+env.viewer.env_index=<N> env.viewer.eye=[0.5,-0.5,1.1]
+env.viewer.lookat=[0.15,0.0,0.55]` — this time the recipe worked on the
+first try, no re-tuning needed). Envs picked from each checkpoint's own
+already-collected seed-1000 eval batch (rows 0–63) rather than re-scanning
+blind: **Policy C, seed 1** (its only seed with real successes) — env 1 for
+the success clip (`final_insertion_depth ≈ 1.3e-4`, `max_contact_force =
+8.7 N`, the lowest-force success in the batch) and env 6 for the near-miss
+(`termination_reason = timeout`, `final_insertion_depth ≈ 0.018` — not as
+razor-thin a margin as Policy A/B's near-misses, since Policy C's low
+success rate meant no tighter near-success was available in the first 64
+envs). **Policy D, seed 2** (highest training-time peak, 30.86%) — env 9
+for the success clip (`final_insertion_depth ≈ 1.1e-4`, `max_contact_force
+= 9.7 N`) and env 17 for the near-miss (`termination_reason = timeout`
+despite `final_insertion_depth ≈ 1.8e-3`, `max_contact_force = 10.5 N` —
+same razor-thin-margin pattern as Policy A/B's near-misses). Videos copied
+into the tracked tree as
+`results/videos/policy_{c_seed1,d_seed2}_{success,nearmiss}_closeup.mp4`,
+with matching 480px/12fps palette-optimized `.gif` previews generated the
+same way as Policy A/B's.
+
+---
+
+## 2026-08-16 — Policy C: 3-seed training complete, real §22 evaluation results
+
+Policy C's 3-seed training batch (`use_force_obs=False, use_force_penalty=True`,
+task `Shaurya-ForcePegInsert-PolicyC-Direct-v0` — the mirror-image ablation of
+Policy B: contact penalty active, but the actor never observes contact force)
+finished all 500 epochs/seed on this box (`bas-zeus`), launched via
+`systemd-run --user --scope --collect` per seed to survive session restarts
+(see `feedback_background_task_resilience` memory). Seed 0: run dirs
+`2026-08-14_23-52-05` + resume `2026-08-15_22-10-02`. Seed 1:
+`2026-08-15_22-26-44`. Seed 2: `2026-08-16_10-25-48`, finished cleanly
+2026-08-16 21:47 ("MAX EPOCHS NUM!", 40881s training time).
+
+**Training-time numbers, 500 epochs/seed:**
+
+| Seed | Final reward | Best reward | Final-20 success | Peak success |
+|---|---|---|---|---|
+| 0 | 46.7 | 51.7 @ 489 | ~0.0% | 0.78% @ 3 |
+| 1 | 90.9 | 114.9 @ 450 | 16.92% | 20.9% @ 450 |
+| 2 | 49.6 | 51.9 @ 449 | 0.02% | 0.39% @ 7 |
+
+**A stark, reproducible seed-dependence not seen this sharply in A or B**: seeds
+0 and 2 trained to a similar reward plateau (~50) but never learned anything
+resembling successful insertion — training-time success stayed at or near
+0.0% for the full 500 epochs on both. Seed 1 is qualitatively different, not
+just quantitatively better: nearly double the reward (90.9 vs ~48) and a real
+16.92% success rate. Reward alone would not have predicted this — seed 0 and
+seed 2's reward curves look like healthy training runs right up until you
+check `Episode/Metrics/success_rate`.
+
+**Step — real evaluation, not the training curve.** Ran
+`scripts/evaluate_policy.py` against all three checkpoints' `nn/Forge.pth`,
+`nominal` suite (500 deterministic episodes/checkpoint, fixed seeds
+`[1000, 1001, 1002]`, `is_deterministic=True`, 64 envs) — launched sequentially
+via `systemd-run --user --scope --collect --unit=policyc-eval-seed{0,1,2}`
+while Policy D seed 0 trained in parallel on the same GPU (one lesson from
+this launch: `evaluate_policy.py` needs the same
+`LD_PRELOAD=/lib/aarch64-linux-gnu/libgomp.so.1` wrapper as
+`train_rl_games.py`, or the process exits immediately on a shared-library
+warning):
+
+| Seed | Success rate | Median steps | Peak force p95 | Force-limit rate |
+|---|---|---|---|---|
+| 0 | 0.0% | 149 | 13.5 N | 0.2% |
+| 1 | 10.2% | 149 | 16.0 N | 0.2% |
+| 2 | 0.0% | 149 | 13.2 N | 0.0% |
+| **mean (range)** | **3.4% (0.0–10.2%)** | 149 | 14.2 N (13.2–16.0) | 0.1% (0.0–0.2%) |
+
+**Lower mean success than both Policy A (7.3%) and Policy B (14.2%), and
+dramatically lower peak contact force than either.** This is the expected
+direction for the ablation but worth stating plainly: a contact penalty
+without a contact observation doesn't just fail to help — it actively hurts
+relative to the geometry-only baseline. The low force numbers are a symptom
+of avoidance, not a safety win: with success this low, most episodes never
+make firm, sustained contact in the first place, so low peak force reflects
+under-exploration of contact-rich states rather than skillful careful
+insertion. Two of three seeds (0.0%, 0.0%) essentially failed to learn the
+task at all; success in the pooled evaluation is almost entirely carried by
+seed 1. CSVs written to `results/raw/policy_c_seed{0,1,2}_nominal.csv`;
+aggregate table (with full caveats, same structure as Policy A/B's) written
+to `results/tables/policy_c_nominal.md`.
+
+(Close-up success/near-miss videos for Policy C, and the combined 4-policy
+§22 results table, are deferred until Policy D's training + evaluation are
+also complete — tracked in the same session's dashboard/heartbeat loop.)
+
+---
+
 ## 2026-08-14 — Policy B: real §22 evaluation results, curated close-up videos
 
 Policy B's 3-seed training batch (`use_force_obs=True, use_force_penalty=False`,

@@ -122,22 +122,35 @@ context you need is which task ID to pass: `Shaurya-ForcePegInsert-Direct-v0`.
 
 ## Results
 
-Policy A and B have real, measured numbers as of 2026-08-14; C and D are not trained yet. Per
-the project doc's own rule: *"Do not fill the table with expected values. Only report measured
-results"* — so those rows stay `TBD`, not filled with guesses.
+All four policies now have real, measured numbers as of 2026-08-18 — the full B/C/D
+9-run batch (3 seeds each) plus the earlier Policy A batch. Per the project doc's own
+rule: *"Do not fill the table with expected values. Only report measured results"* — the
+OOD Success and Jam Rate columns stay `TBD`, since no out-of-distribution suite or
+jam-detection instrumentation exists yet (Week 5 scope).
 
 | Policy | Force Obs. | Force Penalty | Nominal Success | OOD Success | Peak Force p95 | Jam Rate |
 |---|---:|---:|---:|---:|---:|---:|
 | A: Geometry baseline | No | No | 7.3% (6.4–7.8%, n=3 seeds) | TBD | 37.2 N | TBD (not instrumented) |
-| B: Force observation | Yes | No | 14.2% (9.6–17.2%, n=3 seeds) | TBD | 34.7 N | TBD (not instrumented) |
-| C: Force penalty | No | Yes | TBD | TBD | TBD | TBD |
-| D: Force-aware | Yes | Yes | TBD | TBD | TBD | TBD |
+| B: Force observation | Yes | No | **14.2% (9.6–17.2%, n=3 seeds)** | TBD | 34.7 N | TBD (not instrumented) |
+| C: Force penalty | No | Yes | 3.4% (0.0–10.2%, n=3 seeds) | TBD | **14.2 N** | TBD (not instrumented) |
+| D: Force-aware | Yes | Yes | 9.9% (9.2–10.8%, n=3 seeds) | TBD | 18.8 N | TBD (not instrumented) |
+
+**The headline finding of the ablation**: force *observation* is what lets the policy learn
+the task at all (Policy B roughly doubles the baseline's success rate). The force *penalty*
+alone, without the observation, actively hurts (Policy C falls below the baseline — a
+policy punished for contact it cannot sense mostly learns to avoid insertion rather than
+insert carefully). Combining both (Policy D) does not simply stack B's success gain with
+C's force reduction: it lands between the baseline and Policy B on success while achieving
+the lowest peak contact force of any force-aware policy. The two effects are not additive.
+Full writeup and per-seed detail: [`results/tables/all_policies_nominal.md`](results/tables/all_policies_nominal.md).
 
 Per-seed breakdown, caveats (episodes never terminate early, so "force-limit rate" is an
 incidence rate not a true termination rate; jam rate has no detection instrumentation at all
 yet), and the raw per-episode CSVs are in
 [`results/tables/policy_a_nominal.md`](results/tables/policy_a_nominal.md) /
 [`results/tables/policy_b_nominal.md`](results/tables/policy_b_nominal.md) /
+[`results/tables/policy_c_nominal.md`](results/tables/policy_c_nominal.md) /
+[`results/tables/policy_d_nominal.md`](results/tables/policy_d_nominal.md) /
 [`results/raw/`](results/raw/).
 
 Representative videos — a clean success and a genuine near-miss for each trained policy (GIFs,
@@ -156,6 +169,20 @@ so they play inline; full-quality `.mp4` source for each is linked underneath):
 |---|---|
 | ![Success close-up](results/videos/policy_b_seed0_success_closeup.gif) | ![Near-miss close-up](results/videos/policy_b_seed0_nearmiss_closeup.gif) |
 | [.mp4 source](results/videos/policy_b_seed0_success_closeup.mp4) | [.mp4 source](results/videos/policy_b_seed0_nearmiss_closeup.mp4) |
+
+**Policy C / seed 1**
+
+| Success | Near-miss |
+|---|---|
+| ![Success close-up](results/videos/policy_c_seed1_success_closeup.gif) | ![Near-miss close-up](results/videos/policy_c_seed1_nearmiss_closeup.gif) |
+| [.mp4 source](results/videos/policy_c_seed1_success_closeup.mp4) | [.mp4 source](results/videos/policy_c_seed1_nearmiss_closeup.mp4) |
+
+**Policy D / seed 2**
+
+| Success | Near-miss |
+|---|---|
+| ![Success close-up](results/videos/policy_d_seed2_success_closeup.gif) | ![Near-miss close-up](results/videos/policy_d_seed2_nearmiss_closeup.gif) |
+| [.mp4 source](results/videos/policy_d_seed2_success_closeup.mp4) | [.mp4 source](results/videos/policy_d_seed2_nearmiss_closeup.mp4) |
 
 ---
 
