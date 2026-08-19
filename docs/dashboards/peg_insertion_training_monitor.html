@@ -1,0 +1,699 @@
+<title>Peg Insertion Training Monitor</title>
+<style>
+  :root {
+    --bg: #f5f3ee;
+    --surface: #ffffff;
+    --surface-2: #ebe6dc;
+    --border: #dcd5c8;
+    --text: #221f1c;
+    --text-2: #63594d;
+    --text-3: #8c8074;
+    --accent: #0b7a85;
+    --accent-soft: #0b7a8522;
+    --accent-line: #0b7a85;
+    --good: #2f7d3c;
+    --good-bg: #2f7d3c1a;
+    --warn: #b3790f;
+    --warn-bg: #b3790f1a;
+    --crit: #b8402f;
+    --crit-bg: #b8402f1a;
+    --queued: #63594d;
+    --queued-bg: #63594d14;
+    --grid: #ddd6c9;
+    --shadow: 0 1px 2px rgba(30, 26, 20, 0.06), 0 8px 24px -12px rgba(30, 26, 20, 0.12);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181a;
+      --surface: #1b2124;
+      --surface-2: #212a2d;
+      --border: #2c363a;
+      --text: #edefee;
+      --text-2: #a7b0af;
+      --text-3: #758080;
+      --accent: #4fd3db;
+      --accent-soft: #4fd3db22;
+      --accent-line: #4fd3db;
+      --good: #5cb96a;
+      --good-bg: #5cb96a22;
+      --warn: #e0ab3f;
+      --warn-bg: #e0ab3f22;
+      --crit: #e2695a;
+      --crit-bg: #e2695a22;
+      --queued: #a7b0af;
+      --queued-bg: #a7b0af18;
+      --grid: #26302f;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #14181a;
+    --surface: #1b2124;
+    --surface-2: #212a2d;
+    --border: #2c363a;
+    --text: #edefee;
+    --text-2: #a7b0af;
+    --text-3: #758080;
+    --accent: #4fd3db;
+    --accent-soft: #4fd3db22;
+    --accent-line: #4fd3db;
+    --good: #5cb96a;
+    --good-bg: #5cb96a22;
+    --warn: #e0ab3f;
+    --warn-bg: #e0ab3f22;
+    --crit: #e2695a;
+    --crit-bg: #e2695a22;
+    --queued: #a7b0af;
+    --queued-bg: #a7b0af18;
+    --grid: #26302f;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    margin: 0;
+    padding: 32px 20px 64px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .num {
+    font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .page { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+  header.top {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+    flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 20px;
+  }
+  .top-id { display: flex; flex-direction: column; gap: 6px; }
+  .eyebrow { text-transform: uppercase; letter-spacing: 0.09em; font-size: 11.5px; color: var(--text-3); font-weight: 600; }
+  h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+  .top-meta { font-size: 13px; color: var(--text-2); display: flex; gap: 14px; flex-wrap: wrap; }
+  .top-meta span.num { color: var(--text); }
+  .status-block { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.good { background: var(--good-bg); color: var(--good); }
+  .pill.crit { background: var(--crit-bg); color: var(--crit); }
+  .pill.queued { background: var(--queued-bg); color: var(--queued); }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+  .asof { font-size: 12px; color: var(--text-3); }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .kpi .label { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-3); font-weight: 600; }
+  .kpi .value { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; display: flex; align-items: baseline; gap: 6px; }
+  .kpi .value .unit { font-size: 13px; font-weight: 500; color: var(--text-2); }
+  .kpi .sub { font-size: 12.5px; color: var(--text-2); }
+
+  .progress-track { height: 6px; border-radius: 4px; background: var(--surface-2); overflow: hidden; margin-top: 2px; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px 16px; box-shadow: var(--shadow); }
+  .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
+  .panel-title { font-size: 15px; font-weight: 700; }
+  .panel-note { font-size: 12.5px; color: var(--text-3); }
+
+  /* batch overview strip */
+  .batch-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 10px; }
+  .batch-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; background: var(--surface-2); }
+  .batch-card.is-active { background: var(--accent-soft); border-color: var(--accent); }
+  .batch-card .bc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .batch-card .bc-key { font-family: "IBM Plex Mono", ui-monospace, monospace; font-weight: 700; font-size: 15px; }
+  .batch-card .bc-label { font-size: 12.5px; color: var(--text-2); }
+  .batch-card .bc-toggles { display: flex; gap: 6px; font-size: 10.5px; }
+  .toggle-chip { padding: 2px 6px; border-radius: 4px; font-weight: 600; letter-spacing: 0.02em; }
+  .toggle-chip.on { background: var(--accent-soft); color: var(--accent); }
+  .toggle-chip.off { background: var(--surface); color: var(--text-3); border: 1px solid var(--border); }
+  .bc-metric { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 20px; font-weight: 700; }
+  .bc-metric .unit { font-size: 12px; font-weight: 500; color: var(--text-2); }
+  .bc-note { font-size: 11.5px; color: var(--text-3); }
+
+  .chart-wrap { position: relative; width: 100%; }
+  svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
+  .gridline { stroke: var(--grid); stroke-width: 1; }
+  .axis-label { fill: var(--text-3); font-size: 10.5px; font-family: "IBM Plex Mono", ui-monospace, monospace; }
+  .stall-line { stroke: var(--crit); stroke-width: 1.4; stroke-dasharray: 2 3; }
+  .stall-label { fill: var(--crit); font-size: 10.5px; font-weight: 600; font-family: ui-sans-serif, sans-serif; }
+  .area-fill { fill: var(--accent-soft); }
+  .series-line { fill: none; stroke: var(--accent-line); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .fps-line { fill: none; stroke: var(--text-2); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .fps-fill { fill: var(--text-2); opacity: 0.08; }
+  .endpoint { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+  .hover-crosshair { stroke: var(--text-3); stroke-width: 1; stroke-dasharray: 2 3; opacity: 0; pointer-events: none; }
+  .hover-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; opacity: 0; pointer-events: none; }
+  .hover-dot.fps { fill: var(--text-2); }
+  .tooltip {
+    position: absolute; pointer-events: none; background: var(--text); color: var(--bg);
+    font-size: 12px; padding: 6px 9px; border-radius: 6px; line-height: 1.4;
+    transform: translate(-50%, -120%); opacity: 0; white-space: nowrap; z-index: 5;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  .tooltip strong { font-family: ui-sans-serif, sans-serif; font-weight: 600; }
+  .legend-row { display: flex; gap: 18px; font-size: 12px; color: var(--text-2); margin-top: 6px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch { width: 14px; height: 3px; border-radius: 2px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); font-weight: 600; padding: 0 10px 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--border); color: var(--text); }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; }
+  .file-tag { color: var(--text-2); font-size: 12px; }
+  .table-scroll { overflow-x: auto; }
+
+  .diag { display: flex; flex-direction: column; gap: 10px; }
+  .diag-row { display: flex; gap: 10px; font-size: 13.5px; line-height: 1.5; }
+  .diag-icon { flex: none; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; margin-top: 1px; }
+  .diag-icon.ok { background: var(--good-bg); color: var(--good); }
+  .diag-icon.unk { background: var(--surface-2); color: var(--text-3); }
+  .diag-icon.warn { background: var(--warn-bg); color: var(--warn); }
+  .diag-icon.crit { background: var(--crit-bg); color: var(--crit); }
+  .diag-text b { font-weight: 600; }
+  .diag-text .muted { color: var(--text-2); }
+
+  .heartbeat-list { display: flex; flex-direction: column; gap: 0; margin-top: 8px; }
+  .hb-row { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .hb-row:last-child { border-bottom: none; }
+  .hb-time { flex: none; width: 108px; color: var(--text-3); font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11.5px; padding-top: 1px; }
+  .hb-text { color: var(--text); line-height: 1.5; }
+
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+  .action { font-size: 12.5px; font-family: "IBM Plex Mono", ui-monospace, monospace; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; color: var(--text-2); }
+
+  footer.meta { font-size: 11.5px; color: var(--text-3); text-align: center; padding-top: 8px; }
+
+  @media (max-width: 900px) {
+    .kpi-row { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 720px) {
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .batch-grid { grid-template-columns: repeat(2, 1fr); }
+    header.top { flex-direction: column; }
+    .status-block { align-items: flex-start; }
+  }
+</style>
+
+<div class="page">
+  <header class="top">
+    <div class="top-id">
+      <div class="eyebrow">Force-Aware Peg Insertion &middot; RL-Games / PPO</div>
+      <h1 id="page-h1">Peg insertion training monitor</h1>
+      <div class="top-meta">
+        <span><span class="num" id="m-task"></span></span>
+        <span>seed <span class="num" id="m-seed"></span></span>
+        <span><span class="num" id="m-actors"></span> parallel envs</span>
+        <span>lr <span class="num" id="m-lr"></span></span>
+      </div>
+    </div>
+    <div class="status-block">
+      <div class="pill warn" id="status-pill"><span class="dot"></span><span id="status-text">checking&hellip;</span></div>
+      <div class="asof">as of <span id="asof-time" class="num"></span></div>
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div class="panel-title">9-run batch &mdash; A/B/C/D ablation</div>
+      <div class="panel-note">force obs. &times; force penalty, 3 seeds each &middot; nominal-suite success rate once evaluated</div>
+    </div>
+    <div class="batch-grid" id="batch-grid"></div>
+  </section>
+
+  <section class="kpi-row">
+    <div class="kpi">
+      <div class="label">Progress</div>
+      <div class="value"><span class="num" id="k-progress"></span><span class="unit">epochs</span></div>
+      <div class="progress-track"><div class="progress-fill" id="k-progress-fill"></div></div>
+      <div class="sub" id="k-progress-sub"></div>
+    </div>
+    <div class="kpi">
+      <div class="label">Best reward</div>
+      <div class="value"><span class="num" id="k-reward"></span></div>
+      <div class="sub" id="k-reward-sub"></div>
+    </div>
+    <div class="kpi">
+      <div class="label">Throughput</div>
+      <div class="value"><span class="num" id="k-fps"></span><span class="unit">fps avg</span></div>
+      <div class="sub" id="k-fps-sub"></div>
+    </div>
+    <div class="kpi">
+      <div class="label">Est. remaining</div>
+      <div class="value"><span class="num" id="k-eta"></span></div>
+      <div class="sub" id="k-eta-sub"></div>
+    </div>
+    <div class="kpi">
+      <div class="label">Success rate</div>
+      <div class="value"><span class="num" id="k-success"></span></div>
+      <div class="sub" id="k-success-sub"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div class="panel-title">Seeds &mdash; active policy</div>
+      <div class="panel-note">spec requires &ge;3 training seeds per policy</div>
+    </div>
+    <div class="panel-body">
+      <table>
+        <thead><tr><th>Seed</th><th>Status</th><th>Epochs</th><th class="num">Success (last 20)</th><th class="num">Peak success</th></tr></thead>
+        <tbody id="seeds-body"></tbody>
+      </table>
+      <div class="panel-note" style="margin-top:8px;" id="success-source-note">success rate is rl_games' own <code>Episode/Metrics/success_rate</code> TensorBoard scalar, read directly from the run's event file (never printed to stdout)</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div class="panel-title">Reward &mdash; best-so-far</div>
+      <div class="panel-note" id="reward-panel-note"></div>
+    </div>
+    <div class="chart-wrap" id="reward-chart-wrap">
+      <svg class="chart" id="reward-chart" viewBox="0 0 960 300" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="tooltip" id="reward-tooltip"></div>
+    </div>
+    <div class="legend-row">
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--accent-line)"></span>best reward so far</div>
+      <div class="legend-item"><span class="legend-swatch" id="legend-marker-swatch" style="background:var(--good)"></span><span id="legend-marker-label">current epoch</span></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div class="panel-title">Throughput</div>
+      <div class="panel-note" id="fps-panel-note">fps total, per epoch</div>
+    </div>
+    <div class="chart-wrap" id="fps-chart-wrap">
+      <svg class="chart" id="fps-chart" viewBox="0 0 960 140" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="tooltip" id="fps-tooltip"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div class="panel-title">Checkpoints on disk</div>
+      <div class="panel-note" id="ckpt-dir"></div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>File</th><th class="num">Epoch</th><th class="num">Reward</th><th class="num">Size</th><th class="num">Saved</th></tr></thead>
+        <tbody id="ckpt-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div class="panel-title">Diagnostics</div>
+      <div class="panel-note">the mirror-ablation question this run is meant to answer</div>
+    </div>
+    <div class="diag">
+      <div class="diag-row" id="diag-success-row">
+        <div class="diag-icon crit" id="diag-success-icon">!</div>
+        <div class="diag-text" id="diag-success-text"></div>
+      </div>
+      <div class="diag-row">
+        <div class="diag-icon ok">&#10003;</div>
+        <div class="diag-text"><b>Config matches the spec</b> &mdash; <span class="muted">launched with the same tuned settings as Policy A/B (<code>--num_envs=512</code>, <code>minibatch_size=2048</code>, <code>--max_iterations=500</code>), same seed convention (0, 1, 2), same shared DGX Spark box.</span></div>
+      </div>
+      <div class="diag-row" id="diag-contention-row">
+        <div class="diag-icon warn">!</div>
+        <div class="diag-text"><b>Running under real GPU contention</b> &mdash; <span class="muted" id="diag-contention-text"></span></div>
+      </div>
+      <div class="actions">
+        <span class="action">watch: tensorboard --logdir force_peg_rl/logs/rl_games/Forge</span>
+        <span class="action">dashboard: republished on each heartbeat below</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div class="panel-title">Heartbeat log</div>
+      <div class="panel-note">appended each time this dashboard is refreshed</div>
+    </div>
+    <div class="heartbeat-list" id="heartbeat-list"></div>
+  </section>
+
+  <footer class="meta" id="run-footer"></footer>
+</div>
+
+<script>
+  const DATA = {"generated_at":"2026-08-18 13:30 EDT","policies":[{"key":"A","label":"Geometry baseline","force_obs":false,"force_penalty":false,"status":"done","success":7.3,"success_range":"6.4-7.8","note":"3 seeds trained + evaluated"},{"key":"B","label":"Force observation","force_obs":true,"force_penalty":false,"status":"done","success":14.2,"success_range":"9.6-17.2","note":"3 seeds trained + evaluated"},{"key":"C","label":"Force penalty","force_obs":false,"force_penalty":true,"status":"done","success":3.4,"success_range":"0.0-10.2","note":"3 seeds trained + evaluated + video"},{"key":"D","label":"Force-aware","force_obs":true,"force_penalty":true,"status":"done","success":9.9,"success_range":"9.2-10.8","note":"3 seeds trained + evaluated + video"}],"active_policy":"D","task_id":"Shaurya-ForcePegInsert-Direct-v0","seed":2,"run_dirs":["2026-08-17_23-48-36"],"num_actors":512,"learning_rate":"1e-4","max_epoch":500,"last_epoch":498,"best_reward":121.729,"best_reward_epoch":387,"process_running":false,"seeds":[{"seed":0,"status":"done","epochs":500,"success_recent":0.24375,"peak_success":0.277344,"peak_epoch":481},{"seed":1,"status":"done","epochs":500,"success_recent":0.165918,"peak_success":0.205078,"peak_epoch":441},{"seed":2,"status":"done","epochs":500,"success_recent":0.250293,"peak_success":0.308594,"peak_epoch":487}],"checkpoints":[{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-16_21-49-29/nn/Forge.pth","mtime":1786970850.9693694,"size_mb":213.42},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-16_21-49-29/nn/last_Forge_ep_100_rew_59.52276.pth","mtime":1786940783.7018754,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-16_21-49-29/nn/last_Forge_ep_200_rew_88.49942.pth","mtime":1786949850.8411107,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-16_21-49-29/nn/last_Forge_ep_300_rew_110.8062.pth","mtime":1786959155.0351522,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-16_21-49-29/nn/last_Forge_ep_400_rew_109.296646.pth","mtime":1786968664.7193859,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-16_21-49-29/nn/last_Forge_ep_500_rew_83.23592.pth","mtime":1786978489.3911421,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-16_21-49-29/nn/last_Forge_ep_500_rew__83.23592_.pth","mtime":1786978489.4741428,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-17_10-55-26/nn/Forge.pth","mtime":1787019102.0671368,"size_mb":213.42},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-17_10-55-26/nn/last_Forge_ep_100_rew_53.05163.pth","mtime":1786987030.0790267,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-17_10-55-26/nn/last_Forge_ep_200_rew_81.794235.pth","mtime":1786996243.9895349,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-17_10-55-26/nn/last_Forge_ep_300_rew_99.03586.pth","mtime":1787005608.768662,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-17_10-55-26/nn/last_Forge_ep_400_rew_92.19505.pth","mtime":1787015132.804101,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-17_10-55-26/nn/last_Forge_ep_500_rew_113.25681.pth","mtime":1787024885.6882408,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-17_10-55-26/nn/last_Forge_ep_500_rew__113.25681_.pth","mtime":1787024885.7692416,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-17_23-48-36/nn/Forge.pth","mtime":1787060344.4479094,"size_mb":213.42},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-17_23-48-36/nn/last_Forge_ep_100_rew_63.988773.pth","mtime":1787033497.970628,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-17_23-48-36/nn/last_Forge_ep_200_rew_95.22661.pth","mtime":1787042637.5021553,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-17_23-48-36/nn/last_Forge_ep_300_rew_115.52429.pth","mtime":1787051977.5396783,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-17_23-48-36/nn/last_Forge_ep_400_rew_47.777206.pth","mtime":1787061594.0160074,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-17_23-48-36/nn/last_Forge_ep_500_rew_107.993835.pth","mtime":1787071299.9071033,"size_mb":213.43},{"path":"force_peg_rl/logs/rl_games/Forge/2026-08-17_23-48-36/nn/last_Forge_ep_500_rew__107.993835_.pth","mtime":1787071299.990104,"size_mb":213.43}],"reward_series":[{"epoch":2,"reward":-61.158},{"epoch":3,"reward":-34.603},{"epoch":4,"reward":-6.914},{"epoch":5,"reward":5.141},{"epoch":6,"reward":11.767},{"epoch":7,"reward":15.511},{"epoch":8,"reward":15.511},{"epoch":9,"reward":19.29},{"epoch":10,"reward":23.474},{"epoch":11,"reward":24.847},{"epoch":12,"reward":25.351},{"epoch":13,"reward":30.356},{"epoch":14,"reward":31.228},{"epoch":15,"reward":31.228},{"epoch":16,"reward":31.228},{"epoch":17,"reward":32.644},{"epoch":18,"reward":32.644},{"epoch":19,"reward":32.644},{"epoch":20,"reward":32.869},{"epoch":21,"reward":33.548},{"epoch":22,"reward":33.548},{"epoch":23,"reward":33.825},{"epoch":24,"reward":35.133},{"epoch":25,"reward":35.133},{"epoch":26,"reward":35.133},{"epoch":27,"reward":36.143},{"epoch":28,"reward":36.143},{"epoch":29,"reward":36.143},{"epoch":30,"reward":36.143},{"epoch":31,"reward":36.143},{"epoch":32,"reward":37.131},{"epoch":33,"reward":37.131},{"epoch":34,"reward":37.351},{"epoch":35,"reward":38.175},{"epoch":36,"reward":38.175},{"epoch":37,"reward":38.175},{"epoch":38,"reward":38.175},{"epoch":39,"reward":38.36},{"epoch":40,"reward":38.36},{"epoch":41,"reward":38.36},{"epoch":42,"reward":38.36},{"epoch":43,"reward":38.36},{"epoch":44,"reward":38.36},{"epoch":45,"reward":38.661},{"epoch":46,"reward":39.185},{"epoch":47,"reward":39.185},{"epoch":48,"reward":39.285},{"epoch":49,"reward":39.443},{"epoch":50,"reward":39.443},{"epoch":51,"reward":39.612},{"epoch":52,"reward":41.774},{"epoch":53,"reward":41.774},{"epoch":54,"reward":41.774},{"epoch":55,"reward":41.774},{"epoch":56,"reward":41.774},{"epoch":57,"reward":41.774},{"epoch":58,"reward":41.774},{"epoch":59,"reward":41.774},{"epoch":60,"reward":42.162},{"epoch":61,"reward":43.897},{"epoch":62,"reward":43.897},{"epoch":63,"reward":45.302},{"epoch":64,"reward":45.302},{"epoch":65,"reward":45.608},{"epoch":66,"reward":45.608},{"epoch":67,"reward":45.608},{"epoch":68,"reward":49.101},{"epoch":69,"reward":49.101},{"epoch":70,"reward":49.101},{"epoch":71,"reward":49.101},{"epoch":72,"reward":49.101},{"epoch":73,"reward":49.101},{"epoch":74,"reward":49.101},{"epoch":75,"reward":49.101},{"epoch":76,"reward":49.101},{"epoch":77,"reward":49.101},{"epoch":78,"reward":49.101},{"epoch":79,"reward":49.101},{"epoch":80,"reward":49.101},{"epoch":81,"reward":49.101},{"epoch":82,"reward":49.101},{"epoch":83,"reward":51.574},{"epoch":84,"reward":51.574},{"epoch":85,"reward":58.095},{"epoch":86,"reward":58.095},{"epoch":87,"reward":58.095},{"epoch":88,"reward":58.095},{"epoch":89,"reward":58.095},{"epoch":90,"reward":58.095},{"epoch":91,"reward":58.095},{"epoch":92,"reward":58.095},{"epoch":93,"reward":58.095},{"epoch":94,"reward":62.218},{"epoch":95,"reward":62.218},{"epoch":96,"reward":62.218},{"epoch":97,"reward":62.218},{"epoch":98,"reward":62.218},{"epoch":99,"reward":63.989},{"epoch":100,"reward":63.989},{"epoch":101,"reward":63.989},{"epoch":102,"reward":63.989},{"epoch":103,"reward":65.754},{"epoch":104,"reward":72.772},{"epoch":105,"reward":73.232},{"epoch":106,"reward":73.232},{"epoch":107,"reward":73.232},{"epoch":108,"reward":74.518},{"epoch":109,"reward":74.518},{"epoch":110,"reward":74.518},{"epoch":111,"reward":74.518},{"epoch":112,"reward":76.701},{"epoch":113,"reward":76.701},{"epoch":114,"reward":76.701},{"epoch":115,"reward":76.701},{"epoch":116,"reward":76.701},{"epoch":117,"reward":76.701},{"epoch":118,"reward":76.701},{"epoch":119,"reward":76.701},{"epoch":120,"reward":76.701},{"epoch":121,"reward":76.701},{"epoch":122,"reward":84.15},{"epoch":123,"reward":84.15},{"epoch":124,"reward":84.15},{"epoch":125,"reward":84.15},{"epoch":126,"reward":84.15},{"epoch":127,"reward":84.15},{"epoch":128,"reward":84.15},{"epoch":129,"reward":84.15},{"epoch":130,"reward":84.15},{"epoch":131,"reward":84.15},{"epoch":132,"reward":84.15},{"epoch":133,"reward":84.15},{"epoch":134,"reward":87.346},{"epoch":135,"reward":87.346},{"epoch":136,"reward":87.346},{"epoch":137,"reward":87.346},{"epoch":138,"reward":87.346},{"epoch":139,"reward":87.346},{"epoch":140,"reward":89.296},{"epoch":141,"reward":89.296},{"epoch":142,"reward":89.296},{"epoch":143,"reward":89.296},{"epoch":144,"reward":89.296},{"epoch":145,"reward":89.296},{"epoch":146,"reward":89.296},{"epoch":147,"reward":89.296},{"epoch":148,"reward":89.296},{"epoch":149,"reward":89.296},{"epoch":150,"reward":89.296},{"epoch":151,"reward":89.296},{"epoch":152,"reward":89.296},{"epoch":153,"reward":89.296},{"epoch":154,"reward":89.296},{"epoch":155,"reward":89.296},{"epoch":156,"reward":89.296},{"epoch":157,"reward":89.296},{"epoch":158,"reward":89.296},{"epoch":159,"reward":89.296},{"epoch":160,"reward":89.296},{"epoch":161,"reward":89.296},{"epoch":162,"reward":89.296},{"epoch":163,"reward":89.296},{"epoch":164,"reward":89.296},{"epoch":165,"reward":89.296},{"epoch":166,"reward":89.296},{"epoch":167,"reward":91.591},{"epoch":168,"reward":91.591},{"epoch":169,"reward":93.389},{"epoch":170,"reward":93.389},{"epoch":171,"reward":93.389},{"epoch":172,"reward":93.389},{"epoch":173,"reward":93.389},{"epoch":174,"reward":93.389},{"epoch":175,"reward":93.389},{"epoch":176,"reward":93.389},{"epoch":177,"reward":93.389},{"epoch":178,"reward":93.389},{"epoch":179,"reward":93.389},{"epoch":180,"reward":93.389},{"epoch":181,"reward":93.389},{"epoch":182,"reward":93.389},{"epoch":183,"reward":93.389},{"epoch":184,"reward":93.389},{"epoch":185,"reward":93.389},{"epoch":186,"reward":93.389},{"epoch":187,"reward":93.389},{"epoch":188,"reward":93.389},{"epoch":189,"reward":93.389},{"epoch":190,"reward":93.389},{"epoch":191,"reward":93.389},{"epoch":192,"reward":93.389},{"epoch":193,"reward":93.756},{"epoch":194,"reward":93.756},{"epoch":195,"reward":93.756},{"epoch":196,"reward":93.756},{"epoch":197,"reward":94.09},{"epoch":198,"reward":94.09},{"epoch":199,"reward":94.09},{"epoch":200,"reward":95.227},{"epoch":201,"reward":95.227},{"epoch":202,"reward":95.227},{"epoch":203,"reward":95.227},{"epoch":204,"reward":95.227},{"epoch":205,"reward":96.923},{"epoch":206,"reward":96.923},{"epoch":207,"reward":96.923},{"epoch":208,"reward":96.923},{"epoch":209,"reward":96.923},{"epoch":210,"reward":96.923},{"epoch":211,"reward":103.601},{"epoch":212,"reward":103.601},{"epoch":213,"reward":103.601},{"epoch":214,"reward":103.601},{"epoch":215,"reward":103.601},{"epoch":216,"reward":103.601},{"epoch":217,"reward":103.601},{"epoch":218,"reward":103.601},{"epoch":219,"reward":103.601},{"epoch":220,"reward":103.601},{"epoch":221,"reward":103.601},{"epoch":222,"reward":103.601},{"epoch":223,"reward":103.601},{"epoch":224,"reward":103.601},{"epoch":225,"reward":103.601},{"epoch":226,"reward":103.601},{"epoch":227,"reward":103.601},{"epoch":228,"reward":103.601},{"epoch":229,"reward":103.601},{"epoch":230,"reward":103.952},{"epoch":231,"reward":103.952},{"epoch":232,"reward":103.952},{"epoch":233,"reward":103.952},{"epoch":234,"reward":104.118},{"epoch":235,"reward":104.118},{"epoch":236,"reward":104.118},{"epoch":237,"reward":111.767},{"epoch":238,"reward":111.767},{"epoch":239,"reward":111.767},{"epoch":240,"reward":111.767},{"epoch":241,"reward":111.767},{"epoch":242,"reward":111.767},{"epoch":243,"reward":111.767},{"epoch":244,"reward":111.767},{"epoch":245,"reward":111.767},{"epoch":246,"reward":111.767},{"epoch":247,"reward":111.767},{"epoch":248,"reward":111.767},{"epoch":249,"reward":111.767},{"epoch":250,"reward":111.767},{"epoch":251,"reward":111.767},{"epoch":252,"reward":111.767},{"epoch":253,"reward":111.767},{"epoch":254,"reward":111.767},{"epoch":255,"reward":111.767},{"epoch":256,"reward":111.767},{"epoch":257,"reward":111.767},{"epoch":258,"reward":111.767},{"epoch":259,"reward":111.767},{"epoch":260,"reward":111.767},{"epoch":261,"reward":111.767},{"epoch":262,"reward":111.767},{"epoch":263,"reward":111.767},{"epoch":264,"reward":111.767},{"epoch":265,"reward":111.767},{"epoch":266,"reward":111.767},{"epoch":267,"reward":111.767},{"epoch":268,"reward":111.767},{"epoch":269,"reward":111.767},{"epoch":270,"reward":111.767},{"epoch":271,"reward":111.767},{"epoch":272,"reward":111.767},{"epoch":273,"reward":111.767},{"epoch":274,"reward":111.767},{"epoch":275,"reward":111.767},{"epoch":276,"reward":111.767},{"epoch":277,"reward":111.767},{"epoch":278,"reward":111.767},{"epoch":279,"reward":111.767},{"epoch":280,"reward":111.767},{"epoch":281,"reward":111.767},{"epoch":282,"reward":111.767},{"epoch":283,"reward":111.767},{"epoch":284,"reward":111.767},{"epoch":285,"reward":111.767},{"epoch":286,"reward":111.767},{"epoch":287,"reward":111.767},{"epoch":288,"reward":111.767},{"epoch":289,"reward":111.767},{"epoch":290,"reward":111.767},{"epoch":291,"reward":111.767},{"epoch":292,"reward":111.767},{"epoch":293,"reward":111.767},{"epoch":294,"reward":111.767},{"epoch":295,"reward":111.767},{"epoch":296,"reward":117.476},{"epoch":297,"reward":117.476},{"epoch":298,"reward":117.476},{"epoch":299,"reward":117.476},{"epoch":300,"reward":117.476},{"epoch":301,"reward":117.476},{"epoch":302,"reward":117.476},{"epoch":303,"reward":117.476},{"epoch":304,"reward":117.476},{"epoch":305,"reward":117.476},{"epoch":306,"reward":117.476},{"epoch":307,"reward":117.476},{"epoch":308,"reward":117.476},{"epoch":309,"reward":117.476},{"epoch":310,"reward":117.476},{"epoch":311,"reward":117.476},{"epoch":312,"reward":117.476},{"epoch":313,"reward":117.476},{"epoch":314,"reward":117.476},{"epoch":315,"reward":117.476},{"epoch":316,"reward":117.476},{"epoch":317,"reward":118.487},{"epoch":318,"reward":118.487},{"epoch":319,"reward":118.487},{"epoch":320,"reward":118.487},{"epoch":321,"reward":118.487},{"epoch":322,"reward":118.487},{"epoch":323,"reward":118.487},{"epoch":324,"reward":118.487},{"epoch":325,"reward":118.487},{"epoch":326,"reward":118.487},{"epoch":327,"reward":118.487},{"epoch":328,"reward":118.487},{"epoch":329,"reward":118.487},{"epoch":330,"reward":118.487},{"epoch":331,"reward":118.487},{"epoch":332,"reward":118.487},{"epoch":333,"reward":118.487},{"epoch":334,"reward":118.487},{"epoch":335,"reward":118.487},{"epoch":336,"reward":118.487},{"epoch":337,"reward":118.487},{"epoch":338,"reward":118.487},{"epoch":339,"reward":118.487},{"epoch":340,"reward":118.487},{"epoch":341,"reward":118.487},{"epoch":342,"reward":118.487},{"epoch":343,"reward":118.487},{"epoch":344,"reward":118.487},{"epoch":345,"reward":118.487},{"epoch":346,"reward":118.487},{"epoch":347,"reward":118.487},{"epoch":348,"reward":118.487},{"epoch":349,"reward":118.487},{"epoch":350,"reward":118.487},{"epoch":351,"reward":118.487},{"epoch":352,"reward":118.487},{"epoch":353,"reward":118.487},{"epoch":354,"reward":118.487},{"epoch":355,"reward":118.487},{"epoch":356,"reward":118.487},{"epoch":357,"reward":118.487},{"epoch":358,"reward":118.487},{"epoch":359,"reward":118.487},{"epoch":360,"reward":118.487},{"epoch":361,"reward":118.487},{"epoch":362,"reward":118.487},{"epoch":363,"reward":118.487},{"epoch":364,"reward":118.487},{"epoch":365,"reward":118.487},{"epoch":366,"reward":118.487},{"epoch":367,"reward":118.487},{"epoch":368,"reward":118.487},{"epoch":369,"reward":118.487},{"epoch":370,"reward":118.487},{"epoch":371,"reward":118.487},{"epoch":372,"reward":118.63},{"epoch":373,"reward":118.63},{"epoch":374,"reward":118.63},{"epoch":375,"reward":119.791},{"epoch":376,"reward":119.791},{"epoch":377,"reward":119.791},{"epoch":378,"reward":119.791},{"epoch":379,"reward":119.791},{"epoch":380,"reward":119.791},{"epoch":381,"reward":119.791},{"epoch":382,"reward":119.791},{"epoch":383,"reward":119.791},{"epoch":384,"reward":119.791},{"epoch":385,"reward":121.335},{"epoch":386,"reward":121.335},{"epoch":387,"reward":121.729},{"epoch":388,"reward":121.729},{"epoch":389,"reward":121.729},{"epoch":390,"reward":121.729},{"epoch":391,"reward":121.729},{"epoch":392,"reward":121.729},{"epoch":393,"reward":121.729},{"epoch":394,"reward":121.729},{"epoch":395,"reward":121.729},{"epoch":396,"reward":121.729},{"epoch":397,"reward":121.729},{"epoch":398,"reward":121.729},{"epoch":399,"reward":121.729},{"epoch":400,"reward":121.729},{"epoch":401,"reward":121.729},{"epoch":402,"reward":121.729},{"epoch":403,"reward":121.729},{"epoch":404,"reward":121.729},{"epoch":405,"reward":121.729},{"epoch":406,"reward":121.729},{"epoch":407,"reward":121.729},{"epoch":408,"reward":121.729},{"epoch":409,"reward":121.729},{"epoch":410,"reward":121.729},{"epoch":411,"reward":121.729},{"epoch":412,"reward":121.729},{"epoch":413,"reward":121.729},{"epoch":414,"reward":121.729},{"epoch":415,"reward":121.729},{"epoch":416,"reward":121.729},{"epoch":417,"reward":121.729},{"epoch":418,"reward":121.729},{"epoch":419,"reward":121.729},{"epoch":420,"reward":121.729},{"epoch":421,"reward":121.729},{"epoch":422,"reward":121.729},{"epoch":423,"reward":121.729},{"epoch":424,"reward":121.729},{"epoch":425,"reward":121.729},{"epoch":426,"reward":121.729},{"epoch":427,"reward":121.729},{"epoch":428,"reward":121.729},{"epoch":429,"reward":121.729},{"epoch":430,"reward":121.729},{"epoch":431,"reward":121.729},{"epoch":432,"reward":121.729},{"epoch":433,"reward":121.729},{"epoch":434,"reward":121.729},{"epoch":435,"reward":121.729},{"epoch":436,"reward":121.729},{"epoch":437,"reward":121.729},{"epoch":438,"reward":121.729},{"epoch":439,"reward":121.729},{"epoch":440,"reward":121.729},{"epoch":441,"reward":121.729},{"epoch":442,"reward":121.729},{"epoch":443,"reward":121.729},{"epoch":444,"reward":121.729},{"epoch":445,"reward":121.729},{"epoch":446,"reward":121.729},{"epoch":447,"reward":121.729},{"epoch":448,"reward":121.729},{"epoch":449,"reward":121.729},{"epoch":450,"reward":121.729},{"epoch":451,"reward":121.729},{"epoch":452,"reward":121.729},{"epoch":453,"reward":121.729},{"epoch":454,"reward":121.729},{"epoch":455,"reward":121.729},{"epoch":456,"reward":121.729},{"epoch":457,"reward":121.729},{"epoch":458,"reward":121.729},{"epoch":459,"reward":121.729},{"epoch":460,"reward":121.729},{"epoch":461,"reward":121.729},{"epoch":462,"reward":121.729},{"epoch":463,"reward":121.729},{"epoch":464,"reward":121.729},{"epoch":465,"reward":121.729},{"epoch":466,"reward":121.729},{"epoch":467,"reward":121.729},{"epoch":468,"reward":121.729},{"epoch":469,"reward":121.729},{"epoch":470,"reward":121.729},{"epoch":471,"reward":121.729},{"epoch":472,"reward":121.729},{"epoch":473,"reward":121.729},{"epoch":474,"reward":121.729},{"epoch":475,"reward":121.729},{"epoch":476,"reward":121.729},{"epoch":477,"reward":121.729},{"epoch":478,"reward":121.729},{"epoch":479,"reward":121.729},{"epoch":480,"reward":121.729},{"epoch":481,"reward":121.729},{"epoch":482,"reward":121.729},{"epoch":483,"reward":121.729},{"epoch":484,"reward":121.729},{"epoch":485,"reward":121.729},{"epoch":486,"reward":121.729},{"epoch":487,"reward":121.729},{"epoch":488,"reward":121.729},{"epoch":489,"reward":121.729},{"epoch":490,"reward":121.729},{"epoch":491,"reward":121.729},{"epoch":492,"reward":121.729},{"epoch":493,"reward":121.729},{"epoch":494,"reward":121.729},{"epoch":495,"reward":121.729},{"epoch":496,"reward":121.729},{"epoch":497,"reward":121.729},{"epoch":498,"reward":121.729}],"fps_series":[{"epoch":2,"fps":1043},{"epoch":3,"fps":1000},{"epoch":4,"fps":1242},{"epoch":5,"fps":1156},{"epoch":6,"fps":1197},{"epoch":7,"fps":1237},{"epoch":8,"fps":1303},{"epoch":9,"fps":1120},{"epoch":10,"fps":1109},{"epoch":11,"fps":1313},{"epoch":12,"fps":1108},{"epoch":13,"fps":1335},{"epoch":14,"fps":1114},{"epoch":15,"fps":1132},{"epoch":16,"fps":1118},{"epoch":17,"fps":1325},{"epoch":18,"fps":1295},{"epoch":19,"fps":1280},{"epoch":20,"fps":1219},{"epoch":21,"fps":1180},{"epoch":22,"fps":1214},{"epoch":23,"fps":1064},{"epoch":24,"fps":1292},{"epoch":25,"fps":1178},{"epoch":26,"fps":1263},{"epoch":27,"fps":1101},{"epoch":28,"fps":1201},{"epoch":29,"fps":1108},{"epoch":30,"fps":1176},{"epoch":31,"fps":1051},{"epoch":32,"fps":1158},{"epoch":33,"fps":1083},{"epoch":34,"fps":1142},{"epoch":35,"fps":1100},{"epoch":36,"fps":1213},{"epoch":37,"fps":1081},{"epoch":38,"fps":1244},{"epoch":39,"fps":1163},{"epoch":40,"fps":1248},{"epoch":41,"fps":1135},{"epoch":42,"fps":1237},{"epoch":43,"fps":1129},{"epoch":44,"fps":1045},{"epoch":45,"fps":1188},{"epoch":46,"fps":1165},{"epoch":47,"fps":1123},{"epoch":48,"fps":1238},{"epoch":49,"fps":1200},{"epoch":50,"fps":1189},{"epoch":51,"fps":1250},{"epoch":52,"fps":1091},{"epoch":53,"fps":1160},{"epoch":54,"fps":1192},{"epoch":55,"fps":1138},{"epoch":56,"fps":1113},{"epoch":57,"fps":1190},{"epoch":58,"fps":1044},{"epoch":59,"fps":1006},{"epoch":60,"fps":1111},{"epoch":61,"fps":1163},{"epoch":62,"fps":1204},{"epoch":63,"fps":1222},{"epoch":64,"fps":1156},{"epoch":65,"fps":987},{"epoch":66,"fps":1027},{"epoch":67,"fps":1097},{"epoch":68,"fps":1070},{"epoch":69,"fps":1073},{"epoch":70,"fps":1054},{"epoch":71,"fps":1086},{"epoch":72,"fps":1071},{"epoch":73,"fps":1096},{"epoch":74,"fps":1033},{"epoch":75,"fps":1058},{"epoch":76,"fps":1070},{"epoch":77,"fps":1161},{"epoch":78,"fps":992},{"epoch":79,"fps":1094},{"epoch":80,"fps":1050},{"epoch":81,"fps":1172},{"epoch":82,"fps":1054},{"epoch":83,"fps":1022},{"epoch":84,"fps":1034},{"epoch":85,"fps":1147},{"epoch":86,"fps":1073},{"epoch":87,"fps":983},{"epoch":88,"fps":1085},{"epoch":89,"fps":969},{"epoch":90,"fps":957},{"epoch":91,"fps":1057},{"epoch":92,"fps":956},{"epoch":93,"fps":1074},{"epoch":94,"fps":1003},{"epoch":95,"fps":1021},{"epoch":96,"fps":1077},{"epoch":97,"fps":968},{"epoch":98,"fps":977},{"epoch":99,"fps":1121},{"epoch":100,"fps":962},{"epoch":101,"fps":1009},{"epoch":102,"fps":1136},{"epoch":103,"fps":1009},{"epoch":104,"fps":1146},{"epoch":105,"fps":948},{"epoch":106,"fps":1116},{"epoch":107,"fps":1016},{"epoch":108,"fps":1030},{"epoch":109,"fps":950},{"epoch":110,"fps":1112},{"epoch":111,"fps":1058},{"epoch":112,"fps":941},{"epoch":113,"fps":1019},{"epoch":114,"fps":971},{"epoch":115,"fps":1033},{"epoch":116,"fps":1123},{"epoch":117,"fps":1029},{"epoch":118,"fps":1121},{"epoch":119,"fps":1146},{"epoch":120,"fps":1126},{"epoch":121,"fps":1075},{"epoch":122,"fps":938},{"epoch":123,"fps":1030},{"epoch":124,"fps":934},{"epoch":125,"fps":974},{"epoch":126,"fps":1110},{"epoch":127,"fps":959},{"epoch":128,"fps":924},{"epoch":129,"fps":922},{"epoch":130,"fps":1013},{"epoch":131,"fps":1047},{"epoch":132,"fps":907},{"epoch":133,"fps":1029},{"epoch":134,"fps":1045},{"epoch":135,"fps":1094},{"epoch":136,"fps":967},{"epoch":137,"fps":940},{"epoch":138,"fps":970},{"epoch":139,"fps":1103},{"epoch":140,"fps":964},{"epoch":141,"fps":1052},{"epoch":142,"fps":1068},{"epoch":143,"fps":993},{"epoch":144,"fps":1022},{"epoch":145,"fps":999},{"epoch":146,"fps":1103},{"epoch":147,"fps":974},{"epoch":148,"fps":946},{"epoch":149,"fps":921},{"epoch":150,"fps":974},{"epoch":151,"fps":1051},{"epoch":152,"fps":1019},{"epoch":153,"fps":1119},{"epoch":154,"fps":1138},{"epoch":155,"fps":1128},{"epoch":156,"fps":910},{"epoch":157,"fps":1060},{"epoch":158,"fps":941},{"epoch":159,"fps":1031},{"epoch":160,"fps":1005},{"epoch":161,"fps":1064},{"epoch":162,"fps":1114},{"epoch":163,"fps":1031},{"epoch":164,"fps":1105},{"epoch":165,"fps":1091},{"epoch":166,"fps":948},{"epoch":167,"fps":890},{"epoch":168,"fps":973},{"epoch":169,"fps":927},{"epoch":170,"fps":971},{"epoch":171,"fps":1081},{"epoch":172,"fps":976},{"epoch":173,"fps":1012},{"epoch":174,"fps":1020},{"epoch":175,"fps":1002},{"epoch":176,"fps":1106},{"epoch":177,"fps":920},{"epoch":178,"fps":1101},{"epoch":179,"fps":1078},{"epoch":180,"fps":1086},{"epoch":181,"fps":1035},{"epoch":182,"fps":1063},{"epoch":183,"fps":1087},{"epoch":184,"fps":1092},{"epoch":185,"fps":936},{"epoch":186,"fps":1092},{"epoch":187,"fps":1005},{"epoch":188,"fps":1030},{"epoch":189,"fps":1072},{"epoch":190,"fps":1034},{"epoch":191,"fps":901},{"epoch":192,"fps":913},{"epoch":193,"fps":1079},{"epoch":194,"fps":1000},{"epoch":195,"fps":1075},{"epoch":196,"fps":1004},{"epoch":197,"fps":952},{"epoch":198,"fps":926},{"epoch":199,"fps":1004},{"epoch":200,"fps":939},{"epoch":201,"fps":965},{"epoch":202,"fps":1064},{"epoch":203,"fps":947},{"epoch":204,"fps":952},{"epoch":205,"fps":1071},{"epoch":206,"fps":904},{"epoch":207,"fps":914},{"epoch":208,"fps":970},{"epoch":209,"fps":1079},{"epoch":210,"fps":922},{"epoch":211,"fps":998},{"epoch":212,"fps":1099},{"epoch":213,"fps":901},{"epoch":214,"fps":1079},{"epoch":215,"fps":937},{"epoch":216,"fps":980},{"epoch":217,"fps":1029},{"epoch":218,"fps":982},{"epoch":219,"fps":923},{"epoch":220,"fps":1011},{"epoch":221,"fps":1073},{"epoch":222,"fps":967},{"epoch":223,"fps":997},{"epoch":224,"fps":1067},{"epoch":225,"fps":995},{"epoch":226,"fps":998},{"epoch":227,"fps":876},{"epoch":228,"fps":980},{"epoch":229,"fps":1015},{"epoch":230,"fps":1038},{"epoch":231,"fps":997},{"epoch":232,"fps":927},{"epoch":233,"fps":939},{"epoch":234,"fps":914},{"epoch":235,"fps":983},{"epoch":236,"fps":878},{"epoch":237,"fps":893},{"epoch":238,"fps":1007},{"epoch":239,"fps":975},{"epoch":240,"fps":1089},{"epoch":241,"fps":949},{"epoch":242,"fps":1060},{"epoch":243,"fps":953},{"epoch":244,"fps":962},{"epoch":245,"fps":1062},{"epoch":246,"fps":1039},{"epoch":247,"fps":1080},{"epoch":248,"fps":1063},{"epoch":249,"fps":1097},{"epoch":250,"fps":918},{"epoch":251,"fps":995},{"epoch":252,"fps":1053},{"epoch":253,"fps":1033},{"epoch":254,"fps":946},{"epoch":255,"fps":1053},{"epoch":256,"fps":954},{"epoch":257,"fps":952},{"epoch":258,"fps":1080},{"epoch":259,"fps":961},{"epoch":260,"fps":1026},{"epoch":261,"fps":925},{"epoch":262,"fps":1071},{"epoch":263,"fps":889},{"epoch":264,"fps":918},{"epoch":265,"fps":993},{"epoch":266,"fps":1033},{"epoch":267,"fps":1034},{"epoch":268,"fps":933},{"epoch":269,"fps":1067},{"epoch":270,"fps":919},{"epoch":271,"fps":921},{"epoch":272,"fps":895},{"epoch":273,"fps":1058},{"epoch":274,"fps":920},{"epoch":275,"fps":915},{"epoch":276,"fps":1069},{"epoch":277,"fps":1064},{"epoch":278,"fps":956},{"epoch":279,"fps":994},{"epoch":280,"fps":943},{"epoch":281,"fps":1037},{"epoch":282,"fps":1075},{"epoch":283,"fps":1059},{"epoch":284,"fps":1076},{"epoch":285,"fps":931},{"epoch":286,"fps":1072},{"epoch":287,"fps":1053},{"epoch":288,"fps":995},{"epoch":289,"fps":1011},{"epoch":290,"fps":934},{"epoch":291,"fps":1066},{"epoch":292,"fps":1033},{"epoch":293,"fps":885},{"epoch":294,"fps":867},{"epoch":295,"fps":1035},{"epoch":296,"fps":878},{"epoch":297,"fps":883},{"epoch":298,"fps":920},{"epoch":299,"fps":1020},{"epoch":300,"fps":1029},{"epoch":301,"fps":884},{"epoch":302,"fps":1050},{"epoch":303,"fps":976},{"epoch":304,"fps":921},{"epoch":305,"fps":976},{"epoch":306,"fps":1067},{"epoch":307,"fps":899},{"epoch":308,"fps":938},{"epoch":309,"fps":1045},{"epoch":310,"fps":1079},{"epoch":311,"fps":950},{"epoch":312,"fps":1008},{"epoch":313,"fps":968},{"epoch":314,"fps":863},{"epoch":315,"fps":891},{"epoch":316,"fps":874},{"epoch":317,"fps":880},{"epoch":318,"fps":937},{"epoch":319,"fps":869},{"epoch":320,"fps":1069},{"epoch":321,"fps":915},{"epoch":322,"fps":866},{"epoch":323,"fps":1033},{"epoch":324,"fps":1073},{"epoch":325,"fps":1024},{"epoch":326,"fps":938},{"epoch":327,"fps":912},{"epoch":328,"fps":929},{"epoch":329,"fps":1035},{"epoch":330,"fps":1008},{"epoch":331,"fps":991},{"epoch":332,"fps":915},{"epoch":333,"fps":1025},{"epoch":334,"fps":972},{"epoch":335,"fps":886},{"epoch":336,"fps":867},{"epoch":337,"fps":965},{"epoch":338,"fps":1017},{"epoch":339,"fps":1035},{"epoch":340,"fps":909},{"epoch":341,"fps":875},{"epoch":342,"fps":1014},{"epoch":343,"fps":1021},{"epoch":344,"fps":967},{"epoch":345,"fps":1027},{"epoch":346,"fps":1025},{"epoch":347,"fps":847},{"epoch":348,"fps":1017},{"epoch":349,"fps":878},{"epoch":350,"fps":879},{"epoch":351,"fps":885},{"epoch":352,"fps":1005},{"epoch":353,"fps":1068},{"epoch":354,"fps":863},{"epoch":355,"fps":881},{"epoch":356,"fps":946},{"epoch":357,"fps":883},{"epoch":358,"fps":1030},{"epoch":359,"fps":943},{"epoch":360,"fps":990},{"epoch":361,"fps":932},{"epoch":362,"fps":861},{"epoch":363,"fps":883},{"epoch":364,"fps":918},{"epoch":365,"fps":910},{"epoch":366,"fps":916},{"epoch":367,"fps":940},{"epoch":368,"fps":907},{"epoch":369,"fps":917},{"epoch":370,"fps":909},{"epoch":371,"fps":881},{"epoch":372,"fps":854},{"epoch":373,"fps":1014},{"epoch":374,"fps":981},{"epoch":375,"fps":1028},{"epoch":376,"fps":913},{"epoch":377,"fps":1017},{"epoch":378,"fps":919},{"epoch":379,"fps":895},{"epoch":380,"fps":918},{"epoch":381,"fps":971},{"epoch":382,"fps":912},{"epoch":383,"fps":931},{"epoch":384,"fps":1040},{"epoch":385,"fps":924},{"epoch":386,"fps":978},{"epoch":387,"fps":929},{"epoch":388,"fps":956},{"epoch":389,"fps":1044},{"epoch":390,"fps":912},{"epoch":391,"fps":967},{"epoch":392,"fps":926},{"epoch":393,"fps":1018},{"epoch":394,"fps":898},{"epoch":395,"fps":1041},{"epoch":396,"fps":923},{"epoch":397,"fps":883},{"epoch":398,"fps":948},{"epoch":399,"fps":916},{"epoch":400,"fps":897},{"epoch":401,"fps":915},{"epoch":402,"fps":848},{"epoch":403,"fps":1007},{"epoch":404,"fps":888},{"epoch":405,"fps":908},{"epoch":406,"fps":931},{"epoch":407,"fps":863},{"epoch":408,"fps":869},{"epoch":409,"fps":982},{"epoch":410,"fps":1020},{"epoch":411,"fps":859},{"epoch":412,"fps":932},{"epoch":413,"fps":866},{"epoch":414,"fps":1009},{"epoch":415,"fps":896},{"epoch":416,"fps":881},{"epoch":417,"fps":891},{"epoch":418,"fps":922},{"epoch":419,"fps":912},{"epoch":420,"fps":931},{"epoch":421,"fps":947},{"epoch":422,"fps":958},{"epoch":423,"fps":954},{"epoch":424,"fps":929},{"epoch":425,"fps":915},{"epoch":426,"fps":1032},{"epoch":427,"fps":939},{"epoch":428,"fps":972},{"epoch":429,"fps":891},{"epoch":430,"fps":930},{"epoch":431,"fps":1050},{"epoch":432,"fps":1051},{"epoch":433,"fps":919},{"epoch":434,"fps":1032},{"epoch":435,"fps":957},{"epoch":436,"fps":951},{"epoch":437,"fps":984},{"epoch":438,"fps":943},{"epoch":439,"fps":967},{"epoch":440,"fps":913},{"epoch":441,"fps":894},{"epoch":442,"fps":936},{"epoch":443,"fps":971},{"epoch":444,"fps":907},{"epoch":445,"fps":1019},{"epoch":446,"fps":911},{"epoch":447,"fps":854},{"epoch":448,"fps":922},{"epoch":449,"fps":929},{"epoch":450,"fps":870},{"epoch":451,"fps":1005},{"epoch":452,"fps":912},{"epoch":453,"fps":916},{"epoch":454,"fps":954},{"epoch":455,"fps":1022},{"epoch":456,"fps":912},{"epoch":457,"fps":925},{"epoch":458,"fps":934},{"epoch":459,"fps":909},{"epoch":460,"fps":938},{"epoch":461,"fps":1008},{"epoch":462,"fps":1003},{"epoch":463,"fps":859},{"epoch":464,"fps":964},{"epoch":465,"fps":870},{"epoch":466,"fps":906},{"epoch":467,"fps":921},{"epoch":468,"fps":898},{"epoch":469,"fps":893},{"epoch":470,"fps":871},{"epoch":471,"fps":926},{"epoch":472,"fps":1008},{"epoch":473,"fps":1006},{"epoch":474,"fps":1023},{"epoch":475,"fps":1012},{"epoch":476,"fps":865},{"epoch":477,"fps":900},{"epoch":478,"fps":1002},{"epoch":479,"fps":902},{"epoch":480,"fps":1022},{"epoch":481,"fps":854},{"epoch":482,"fps":913},{"epoch":483,"fps":923},{"epoch":484,"fps":1000},{"epoch":485,"fps":1014},{"epoch":486,"fps":956},{"epoch":487,"fps":895},{"epoch":488,"fps":849},{"epoch":489,"fps":919},{"epoch":490,"fps":993},{"epoch":491,"fps":882},{"epoch":492,"fps":855},{"epoch":493,"fps":965},{"epoch":494,"fps":902},{"epoch":495,"fps":939},{"epoch":496,"fps":888},{"epoch":497,"fps":1030},{"epoch":498,"fps":1007}],"heartbeats":[{"ts":1786845542,"text":"Policy C seed 0: log text shows epoch 478/500 (best reward 51.5, vs Policy B seed 0's 132.6 at the same point), but the on-disk Forge.pth checkpoint is newer than the last log line \u2014 stdout is buffered, so the log under-reports true progress. GPU at 91%, process actively computing, not stalled. Dashboard stood up, tracking begins."},{"ts":1786845936,"text":"Operational hiccup, caught and handled: the Claude Code session process restarted (cause unclear on this end), which killed this agent's tracked wrapper script and monitor for the 3-seed training loop. The actual GPU training process (seed 0, PID 360150) survived independently as an orphaned process and kept training uninterrupted \u2014 now at epoch 490/500, best reward 51.673866. Because the wrapper script that was supposed to auto-launch seeds 1 and 2 is gone, this agent is now taking over that handoff manually (launching each subsequent seed itself, watched via a fresh monitor) instead of trusting the original chained script."},{"ts":1786846235,"text":"Seed 0 was silently killed a second time at epoch 490/500 - no OOM, no reboot, no traceback. Root cause found: it was reparented to init (surviving its wrapper script's death) but stayed in the login session's systemd cgroup, which got torn down when that session closed (Linger was off). Fixed by enabling linger for this user and relaunching under  (persistent user slice, not a session scope) - confirmed via systemctl --user status. Resumed from the Forge.pth checkpoint at epoch 489 rather than restarting from scratch, so the ~22 hours already spent wasn't lost. Same launch pattern will be used for every remaining seed and for Policy D."},{"ts":1786847216,"text":"Seed 0 finished cleanly under the new systemd-run launch - epoch 500/500, final reward 47.5 (best was 51.7 at epoch 489), clean 'MAX EPOCHS NUM!' shutdown, no errors. Launched seed 1 the same hardened way (systemd-run --user --scope, confirmed in the persistent user@1002.service slice via systemctl). 1 of 3 Policy C seeds done."},{"ts":1786847617,"text":"Added the success-rate KPI and per-seed columns back (dropped by mistake when this dashboard was rebuilt from the Policy B template) - sourced from rl_games' Episode/Metrics/success_rate TensorBoard scalar, which is never printed to stdout so it needed a separate event-file read. The number is stark: seed 0 finished all 500 epochs at ~0.0% training-time success (peak 0.78% at epoch 3, noise), versus Policy B's seed 0 reaching 30%+. The climbing reward curve was masking this - whatever reward Policy C is finding isn't coming from successful insertions."},{"ts":1786849305,"text":"Seed 1's stdout log hadn't flushed a single epoch line after 33 minutes of real training (block-buffering, not a stall - Forge.pth was fresh). Switched the reward/fps/success pipeline to read straight from each run's TensorBoard event file instead, which isn't subject to that lag - more robust going forward. Seed 1 is at epoch 26/500, success rate still ~0% (peak 0.39% at epoch 3), same pattern as seed 0. GPU contention has cleared - seed 1 is running at ~1200-1350 fps vs seed 0's ~370-410."},{"ts":1786850883,"text":"Seed 1 at epoch 47/500 (~1h in, ~78s/epoch => roughly 9-10h remaining). Success rate still flat at 0.0% (peak 0.39% at epoch 3, same noise-only pattern as seed 0). Re-armed the completion monitor as persistent (the prior 1-hour timeout was too short for a run this long) - no further action needed until it finishes or the next periodic check."},{"ts":1786852764,"text":"Seed 1 at epoch 71/500, cadence holding ~80s/epoch (roughly 9.5h left). Success rate essentially flat at 0% (0.11% mean of last 20, peak 0.39% at epoch 3 - noise). No action needed; routine freshness check."},{"ts":1786854618,"text":"Seed 1 at epoch 94/500, best reward 41.4. Success rate ticked up slightly to 0.36% mean of last 20 (peak 0.78% at epoch 78) - still noise-level, same pattern as seed 0. Routine check, on track."},{"ts":1786856486,"text":"Seed 1 at epoch 117/500, first periodic checkpoint saved (ep_100). Success rate has ticked up a bit more: 1.13% mean of last 20 (peak 2.54% at epoch 106) - still low, but the first sign of any real upward trend rather than pure noise. Worth watching, not concluding anything yet."},{"ts":1786858544,"text":"The Claude Code session restarted again - this time seed 1's training process didn't even blink (still running under the persistent systemd user slice, unaffected). Confirms the systemd-run + linger fix genuinely solved the earlier kill issue, not just once. Only this agent's own tracking (a Monitor task) needed re-arming. Seed 1 now at epoch 142/500, success rate 1.26% mean of last 20 (peak 2.93% at epoch 132) - the slight upward trend continues."},{"ts":1786860443,"text":"Seed 1 at epoch 164/500, best reward 50.9. Success rate has plateaued around 1.25% (peak still 2.93% at epoch 132) - the earlier uptick leveled off rather than continuing to climb. Routine check, on track."},{"ts":1786862303,"text":"Seed 1 at epoch 186/500, best reward 54.4. Success rate climbing again: 2.35% mean of last 20 (peak 3.32% at epoch 172) - noisy but the overall trend since epoch ~100 is upward, not flat like seed 0's full run. Still far below Policy B's 30%+ territory. Routine check."},{"ts":1786864167,"text":"Notable jump: seed 1 at epoch 208/500, success rate accelerating to 4.61% mean of last 20 (peak 6.05% at epoch 198) - roughly double the previous check. Reward jumped too (best 67.9, up from 54.4). This is the clearest sign yet that seed 1 is actually learning to insert, unlike seed 0 which stayed near 0% the whole run. Genuinely different trajectories between seeds so far."},{"ts":1786866022,"text":"Seed 1 continues climbing: epoch 229/500, success rate 5.07% mean of last 20 (peak 7.81%, a new high right at the current epoch). Reward at 74.0. The acceleration from the last check is holding, not a one-off blip."},{"ts":1786867884,"text":"Halfway point: seed 1 at epoch 250/500, success rate up to 7.89% mean of last 20 (peak 9.18%). Reward 79.0. Steady climb continues - now approaching Policy A's real nominal-eval baseline (7.3%), though this is training-time success not deterministic eval, so not directly comparable yet."},{"ts":1786869746,"text":"Seed 1 at epoch 271/500, success rate 9.15% mean of last 20 (peak 12.5%, another new high). Reward 88.8. Still climbing steadily - now past Policy A's real eval baseline (7.3%), though again training-time vs. eval are different measurements."},{"ts":1786871609,"text":"Seed 1 at epoch 292/500, success rate 9.68% mean of last 20 (still peak 12.5% - no new high this cycle, best reward also unchanged at 88.8 since epoch 268). Progress continuing at normal cadence, just a quieter stretch. On track."},{"ts":1786873469,"text":"Seed 1 at epoch 313/500, success rate 11.58% mean of last 20 (peak 14.65%, another new high). Reward 94.0. Consistent, ongoing climb - no sign of plateauing yet with 187 epochs still to go."},{"ts":1786875325,"text":"Seed 1 at epoch 334/500, success rate 11.09% mean of last 20 - a slight dip from 11.58%, peak still 14.65% at epoch 303 (no new high). Reward essentially flat too (94.0 vs 94.0). Looks like a brief plateau, not a reversal; watching whether it resumes climbing."},{"ts":1786877187,"text":"Seed 1 at epoch 355/500, success rate recovered slightly to 11.55% mean of last 20 (peak still 14.65% at epoch 303, plateau continuing at the peak level). Reward ticked up to 94.5. 145 epochs remaining."},{"ts":1786879046,"text":"Seed 1 at epoch 375/500, success rate 12.26% mean of last 20 (peak still 14.65%, unchanged since epoch 303 - about 70 epochs without a new peak). Reward 95.9. 125 epochs left; watching whether it breaks the plateau or settles here."},{"ts":1786880913,"text":"Plateau broke: seed 1 at epoch 395/500, success rate 13.03% mean of last 20, peak jumped to 16.6% at epoch 387 (first new high in ~84 epochs). Reward also jumped to 103.2 (from 95.9). Climb has resumed with 105 epochs left."},{"ts":1786882833,"text":"Seed 1 at epoch 416/500, success rate 14.74% mean of last 20, another new peak of 19.53%. Reward 111.4 (up from 103.2). Strong finishing kick - 84 epochs left, seed 2 will launch as soon as this one confirms a clean finish."},{"ts":1786884748,"text":"Seed 1 at epoch 438/500, success rate 15.13% mean of last 20 (peak still 19.53%, no new high this cycle). 62 epochs left - should wrap up within the next 1-2 cycles."},{"ts":1786886607,"text":"Seed 1 at epoch 459/500, success rate 17.42% mean of last 20, new peak 20.9%. Reward 114.9. Only 41 epochs left - should finish this cycle or next."},{"ts":1786888167,"text":"Seed 1 at epoch 476/500, success rate 15.92% mean of last 20 (peak still 20.9%). Just 24 epochs left - final result should land within this cycle or the next check."},{"ts":1786889426,"text":"Seed 1 at epoch 489/500, success rate 17.19% mean of last 20 (peak 20.9%). Just 11 epochs left - final result almost certainly lands within the next check."},{"ts":1786890404,"text":"Seed 1 done: epoch 500/500 clean finish (\"MAX EPOCHS NUM!\"), final success rate 16.92% mean of last 20 (peak 20.9% at epoch 450) - a real, substantial climb from seed 0's ~0% the whole run. 2 of 3 Policy C seeds complete. Launched seed 2 immediately (systemd-run pattern, persistent monitor armed)."},{"ts":1786892305,"text":"Seed 2 at epoch 24/500, success rate near-zero so far (0.04% mean of last 20) - normal for this early in a run, both seed 0 and seed 1 looked the same at this stage. Too early to say which trajectory it'll follow."},{"ts":1786894165,"text":"Seed 2 at epoch 48/500, success rate still 0% (peak 0.39%). Reward 34.6. Consistent with the early phase of both prior seeds - too early to read into it."},{"ts":1786896018,"text":"Seed 2 at epoch 73/500, success rate still 0%. Reward 38.2. Routine check, on track."},{"ts":1786897884,"text":"Seed 2 at epoch 96/500, success rate still 0%. Reward 41.3. Routine check, on track."},{"ts":1786899752,"text":"Seed 2 at epoch 120/500, success rate still 0% (peak 0.39% at epoch 7 - unchanged since). Notably behind seed 1's trajectory, which had already shown its first real uptick by epoch ~106-132. Genuinely unclear yet whether seed 2 follows seed 0's flat pattern or eventually climbs like seed 1."},{"ts":1786901670,"text":"Seed 2 at epoch 144/500, success rate still 0%. Reward 43.7. Continuing to trail seed 1's pace at the equivalent epoch."},{"ts":1786903525,"text":"Seed 2 at epoch 166/500, success rate still 0%. Reward 45.2. Routine check, on track."},{"ts":1786905389,"text":"Seed 2 at epoch 189/500, success rate still 0% - now clearly trailing seed 1, which was already at 4-5% by this point in its run. Reward 45.6, growing slowly. Worth flagging as a real possibility this seed follows seed 0's flat trajectory instead."},{"ts":1786907246,"text":"Seed 2 at epoch 212/500, success rate barely nonzero (0.07% mean of last 20). Reward 46.7. Still well behind seed 1's pace - seed 1 had already crossed 15% by epoch 208. Increasingly looks like it may track closer to seed 0's flat outcome, but 288 epochs remain."},{"ts":1786909104,"text":"Seed 2 at epoch 235/500, success rate still near-zero (0.08% mean of last 20). Reward 47.3. Nearly halfway through with no real signal of insertion success yet - a genuinely different trajectory from seed 1 so far."},{"ts":1786910966,"text":"Seed 2 past the halfway point: epoch 257/500, success rate still near-zero (0.02% mean of last 20). Reward 48.4. On track, no change to the picture."},{"ts":1786912826,"text":"Seed 2 at epoch 280/500, success rate still 0%. Reward 48.8. Routine check, on track."},{"ts":1786914699,"text":"Seed 2 at epoch 302/500, success rate still near-zero. Reward 48.8, flat since epoch 276. 198 epochs left."},"Heartbeat 41 (17:13) - Seed 2 at epoch 304/500 (only +2 in last 30min, contention likely). Success still near-zero (0.02% last20, peak 0.39%@ep7). Reward flat at 48.8 since epoch 276. 196 epochs left.","Heartbeat 42 (17:43) - Seed 2 at epoch 326/500, progress back to normal pace (+22 in 30min). Reward broke past its plateau to 50.5 (was flat at 48.8). Success still near-zero (0.02% last20, peak 0.39%@ep7). 174 epochs left.","Heartbeat 43 (18:13) - Seed 2 at epoch 349/500, steady pace (+23 in 30min). Reward at 50.5. Success rate still near-zero (0.01% last20, peak 0.39%@ep7). 151 epochs left.","Heartbeat 44 (18:43) - Seed 2 at epoch 372/500, steady pace (+23 in 30min, confirmed via TensorBoard despite a stale Forge.pth mtime). Reward holding at 50.5. Success rate still near-zero. 128 epochs left.","Heartbeat 45 (19:13) - Seed 2 at epoch 395/500, steady pace (+23 in 30min). Reward 50.5. Success rate still essentially zero. 105 epochs left.","Heartbeat 46 (19:43) - Seed 2 at epoch 417/500, steady pace (+22 in 30min). Reward ticked up to 51.8. Success rate still essentially zero. 83 epochs left, likely 1-2 more cycles to finish.","Heartbeat 47 (20:13) - Seed 2 at epoch 439/500, steady pace (+22 in 30min). Success rate still essentially zero. 61 epochs left, should finish next cycle.","Heartbeat 48 (20:43) - Seed 2 at epoch 462/500, steady pace (+23 in 30min). Success rate still essentially zero. 38 epochs left, should finish this next cycle.","Heartbeat 49 (21:08) - Seed 2 at epoch 480/500, pace slowed slightly (+18 in 25min). Success rate still essentially zero. 20 epochs left, should finish very soon.","Heartbeat 50 (21:38) - Seed 2 at epoch 499/500, one epoch from done. Success rate finished essentially at zero. Persistent monitor will catch the process exit imminently.","Heartbeat 51 (21:58) - Policy C seed 2 finished cleanly at epoch 500/500 (reward 49.7, MAX EPOCHS NUM confirmed). Policy C training is DONE (all 3 seeds). Launched nominal evaluation for Policy C seed 0 (checkpoint from 2026-08-15_22-10-02) and started Policy D seed 0 training (task=Shaurya-ForcePegInsert-Direct-v0, force-aware baseline). Dashboard now tracking Policy D.","Heartbeat 51 (21:58) - Policy C seed 2 finished cleanly at epoch 500/500 (reward 49.7, MAX EPOCHS NUM confirmed). Policy C training is DONE (all 3 seeds). Launched nominal evaluation for Policy C seed 0 (checkpoint from 2026-08-15_22-10-02) and started Policy D seed 0 training (task=Shaurya-ForcePegInsert-Direct-v0, force-aware baseline, run dir 2026-08-16_21-49-29). Dashboard now tracking Policy D.","Heartbeat 52 (22:03) - Policy C seed0 eval done: 0.0% success rate (consistent with its ~0% training-time performance). Launched seed1 eval. Policy D seed0 training at epoch 16/500, very early - reward 31.6, success rate near-zero as expected this early.","Heartbeat 53 (22:33) - Policy C seed1 eval done: 10.2% success (vs 16.92% training peak - expected eval-vs-training gap). Launched seed2 eval (last one). Policy D seed0 at epoch 25/500, reward 35.5, success still near-zero (normal this early).","Heartbeat 54 (22:47) - Policy C seed2 eval still running (competing with Policy D training for GPU, slower startup). Policy D seed0 at epoch 31/500, reward 37.5, success still near-zero (normal this early).","Heartbeat 55 (22:58) - Policy C evaluation COMPLETE: 3.4% mean success (0.0-10.2% range), results/tables/policy_c_nominal.md and experiment_log.md entry written. Policy D seed0 now running faster with the GPU freed up, epoch 39/500.","Heartbeat 57 (23:31) - Policy D seed0 at epoch 61/500, reward 42.9, success still near-zero (normal this early in training). GPU no longer shared with Policy C eval, steady progress.","Heartbeat 58 (00:02) - Policy D seed0 at epoch 83/500, steady pace. Reward 50.2, success rate starting to tick up (0.41% last20, peak 1.17%@78) - early but a bit more encouraging than C's seed0/seed2.","Heartbeat 59 (00:33) - Policy D seed0 at epoch 104/500, reward jumped to 64.3. Success rate climbing (1.59% last20, peak 3.71%@96) - clearly ahead of any Policy C seed's trajectory at this point in training.","Heartbeat 60 (01:04) - Policy D seed0 at epoch 125/500, steady pace. Reward climbing to 76.6, success rate holding around 2% (1.99% last20, peak 3.71%).","Heartbeat 61 (01:35) - Policy D seed0 at epoch 145/500, steady pace. Reward plateaued around 76.6 since epoch 124, success rate holding ~1.9%.","Heartbeat 62 (02:06) - Policy D seed0 at epoch 166/500, steady pace. Reward climbed to 85.6, success rate ticking up to 2.57% (peak 4.1%@152).","Heartbeat 63 (02:37) - Policy D seed0 at epoch 186/500, steady pace. Reward flat at 85.6 since epoch 156, success rate holding ~2.2%.","Heartbeat 64 (03:08) - Policy D seed0 at epoch 206/500, steady pace. Reward climbed to 92.5, success rate ticking up to 3.64% (peak 4.69%@196).","Heartbeat 65 (03:39) - Policy D seed0 at epoch 226/500, steady pace. Reward climbing to 95.8, success rate up to 4.5% (peak 6.64%@223) - clear, steady improvement.","Heartbeat 66 (04:10) - Policy D seed0 at epoch 246/500 (halfway). Reward broke 100 (102.2), success rate accelerating to 6.48% (peak 9.38%@246).","Heartbeat 67 (04:41) - Policy D seed0 at epoch 266/500, steady pace. Success rate broke 10% peak (10.55%@260, last20 mean 7.95%) - already outperforming Policy C's best seed at a much earlier epoch.","Heartbeat 68 (05:12) - Policy D seed0 at epoch 286/500, steady pace. Success rate crossed 10% (last20 mean 9.98%, peak 12.3%@278).","Heartbeat 69 (05:43) - Policy D seed0 at epoch 306/500, steady pace. Success rate holding above 10% (last20 mean 10.56%, peak 13.48%@305).","Heartbeat 70 (06:15) - Policy D seed0 at epoch 326/500, steady pace. Success rate continuing to climb (last20 mean 12.28%, peak 13.87%@312).","Heartbeat 71 (06:47) - Policy D seed0 at epoch 346/500, steady pace. Success rate climbing fast (last20 mean 15.61%, peak 21.29%@347) - already exceeding Policy C seed1's 20.9% peak, and Policy B's 14.2% eval mean, with 154 epochs still to go.","Heartbeat 72 (07:19) - Policy D seed0 at epoch 366/500, steady pace. Success rate continuing to climb (last20 mean 18.25%, peak 22.27%@365).","Heartbeat 73 (07:51) - Policy D seed0 at epoch 386/500, steady pace. Success rate at 19.46% (peak 24.02%@378).","Heartbeat 74 (08:22) - Policy D seed0 at epoch 406/500, steady pace. Success rate crossed 20% (last20 mean 20.20%, peak 24.02%). 94 epochs left.","Heartbeat 75 (08:53) - Policy D seed0 at epoch 424/500, steady pace. Success rate at 21.53% (peak 24.61%@418). 76 epochs left.","Heartbeat 76 (09:25) - Policy D seed0 at epoch 444/500, steady pace. Success rate holding around 20.18% (peak 24.61%). 56 epochs left.","Heartbeat 77 (09:52) - Policy D seed0 at epoch 461/500, steady pace. Success rate at 21.37% (peak 25.20%@457). 39 epochs left, should finish this cycle.","Heartbeat 78 (10:14) - Policy D seed0 at epoch 475/500, close to done. Success rate at 23.38% (peak 26.37%@473). 25 epochs left.","Heartbeat 79 (10:31) - Policy D seed0 at epoch 484/500, close to done. Success rate at 24.03% (peak 27.73%@481). 16 epochs left.","Heartbeat 80 (10:43) - Policy D seed0 at epoch 492/500, 8 epochs from done. Success rate at 24.90% (peak 27.73%).","Heartbeat 81 (10:55) - Policy D seed0 finished cleanly at epoch 500/500 (MAX EPOCHS NUM, 47113s training time, final reward 83.2). Final success: 24.37% last-20 mean, 27.73% peak@481 - by far the best training-time trajectory of any seed this session, matching the force-observation hypothesis. Launched Policy D seed1 (run dir 2026-08-17_10-55-26). 2 seeds left.","Heartbeat 82 (11:28) - Policy D seed1 at epoch 23/500, very early. Reward 31.0, success near-zero (normal this early).","Heartbeat 83 (12:00) - Policy D seed1 at epoch 46/500, steady pace. Reward 38.3, success still near-zero (normal this early).","Heartbeat 84 (12:31) - Policy D seed1 at epoch 67/500, steady pace. Reward 42.0, success still near-zero - tracking seed0's trajectory at this point closely.","Heartbeat 85 (13:03) - Policy D seed1 at epoch 90/500, steady pace. Reward 50.1, success rate just starting to tick up (peak 0.98%@84).","Heartbeat 86 (13:35) - Policy D seed1 at epoch 111/500, steady pace. Reward 56.0, success rate ticking up (0.59% last20, peak 1.17%@105).","Heartbeat 87 (14:07) - Policy D seed1 at epoch 133/500, steady pace. Reward jumped to 72.4, success rate climbing to 1.30% (peak 2.73%@133).","Heartbeat 88 (14:39) - Policy D seed1 at epoch 153/500, steady pace. Reward 80.5, success rate climbing to 3.08% (peak 5.86%@136).","Heartbeat 89 (15:11) - Policy D seed1 at epoch 174/500, steady pace. Reward flat around 80.8 since epoch 166, success rate at 3.76%.","Heartbeat 90 (15:42) - Policy D seed1 at epoch 194/500, steady pace. Reward broke past plateau to 90.1, success rate at 5.03% (peak 6.64%@189).","Heartbeat 91 (16:14) - Policy D seed1 at epoch 215/500, steady pace. Reward flat around 90.2, success rate holding around 5.19%.","Heartbeat 92 (16:46) - Policy D seed1 at epoch 235/500, steady pace. Reward at 95.1, success rate climbing to 6.82% (peak 8.59%@224).","Heartbeat 93 (17:18) - Policy D seed1 at epoch 256/500 (halfway). Reward flat at 95.1 since epoch 225, success rate at 7.56% (peak 9.38%@238).","Heartbeat 94 (17:50) - Policy D seed1 at epoch 276/500, steady pace. Reward broke past plateau to 102.5, success rate at 9.17% (peak 11.72%@268).","Heartbeat 95 (18:22) - Policy D seed1 at epoch 296/500, steady pace. Reward flat at 102.5 since epoch 268, success rate holding ~9.01% (peak 11.91%@295).","Heartbeat 96 (18:54) - Policy D seed1 at epoch 317/500, steady pace. Reward at 102.7, success rate climbing to 11.48% (peak 13.87%@307).","Heartbeat 97 (19:25) - Policy D seed1 at epoch 335/500, pace slowed slightly (+18 in 30min, likely contention). Reward 104.3, success rate holding ~11.51% (peak 15.04%@330).","Heartbeat 98 (19:57) - Policy D seed1 at epoch 355/500, steady pace resumed. Reward broke past plateau to 113.2, success rate climbing to 13.96% (peak 16.41%@349).","Heartbeat 99 (20:29) - Policy D seed1 at epoch 376/500, steady pace. Reward flat at 113.2 since epoch 345, success rate holding ~14.37% (peak 17.19%@367).","Heartbeat 100 (21:01) - Policy D seed1 at epoch 396/500, steady pace. Reward flat at 113.2, success rate holding ~15.03% (peak 18.16%@380). 104 epochs left.","Heartbeat 101 (21:33) - Policy D seed1 at epoch 416/500, steady pace. Reward at 114.7, success rate climbing to 15.85% (peak 19.34%@417). 84 epochs left.","Heartbeat 102 (22:05) - Policy D seed1 at epoch 435/500, steady pace. Reward flat at 114.7, success rate holding ~16.33% (peak 19.34%). 65 epochs left.","Heartbeat 103 (22:37) - Policy D seed1 at epoch 456/500, steady pace. Reward at 119.1, success rate at 16.78% (peak 20.51%@441). 44 epochs left, should finish soon.","Heartbeat 104 (23:04) - Policy D seed1 at epoch 458/500, reward 119.1, success rate 16.64% (peak 20.51%@441). 42 epochs left, still on pace to finish soon.","Heartbeat 105 (23:29) - Policy D seed1 at epoch 474/500, reward 119.1, success rate 15.55% (peak 20.51%@441). 26 epochs left, should finish this cycle or next.","Heartbeat 106 (23:40) - Policy D seed1 at epoch 482/500, reward 119.1, success rate 16.55% (peak 20.51%@441). 18 epochs left, imminent finish. (Monitor task was cycled by a session restart, re-armed against the same PID - process itself never stopped.)","Heartbeat 107 (00:00) - Policy D seed1 at epoch 493/500, reward 119.1, success rate 17.06% (peak 20.51%@441). Only 7 epochs left, imminent finish.","Heartbeat 108 (23:49) - Policy D seed1 finished cleanly at epoch 500/500 (MAX EPOCHS NUM!, 46352s training time). Launched Policy D seed2 (run dir 2026-08-17_23-48-36, PID 393547, unit policyd-seed2.scope) - last seed of the batch.","Heartbeat 109 (00:20) - Policy D seed2 (last seed of the batch) at epoch 21/500, reward 33.5, still early. On pace with seed0/seed1's trajectory so far.","Heartbeat 110 (00:51) - Policy D seed2 at epoch 44/500, reward 38.4, still early, normal pace.","Heartbeat 111 (01:22) - Policy D seed2 at epoch 65/500, reward 45.6, still early, normal pace.","Heartbeat 112 (01:53) - Policy D seed2 at epoch 87/500, reward 58.1, success rate starting to climb (0.63% last-20, peak 1.76%@85). Normal pace.","Heartbeat 113 (02:24) - Policy D seed2 at epoch 107/500, reward 73.2, success climbing (2.36% last-20, peak 5.08%@105). Normal pace.","Heartbeat 114 (02:55) - Policy D seed2 at epoch 128/500, reward 84.2, success climbing (4.74% last-20, peak 7.03%@122). Normal pace.","Heartbeat 115 (03:26) - Policy D seed2 at epoch 148/500, reward 89.3, success climbing (5.86% last-20, peak 8.40%@136). Normal pace.","Heartbeat 116 (03:57) - Policy D seed2 at epoch 169/500, reward 93.4, success climbing (7.98% last-20, peak 10.55%@168). Normal pace.","Heartbeat 117 (04:28) - Policy D seed2 at epoch 189/500, reward 93.4 (plateauing), success still climbing (9.37% last-20, peak 11.91%@186). Normal pace.","Heartbeat 118 (04:59) - Policy D seed2 at epoch 209/500, reward 96.9, success climbing (10.46% last-20, peak 13.48%@200). Normal pace.","Heartbeat 119 (05:31) - Policy D seed2 at epoch 230/500, reward 104.0, success climbing (12.27% last-20, peak 15.04%@211). Normal pace.","Heartbeat 120 (06:03) - Policy D seed2 at epoch 251/500 (halfway), reward 111.8, success climbing (13.80% last-20, peak 17.58%@237). Normal pace.","Heartbeat 121 (06:34) - Policy D seed2 at epoch 270/500, reward 111.8 (holding near peak), success 14.53% last-20 (peak 17.58%@237). Normal pace.","Heartbeat 122 (07:06) - Policy D seed2 at epoch 291/500, reward 111.8 (stable), success 15.07% last-20 (peak 17.58%@237). Normal pace.","Heartbeat 123 (07:37) - Policy D seed2 at epoch 311/500, reward 117.5 (new peak), success 14.33% last-20 (peak 17.58%@237). Normal pace.","Heartbeat 124 (08:08) - Policy D seed2 at epoch 330/500, reward 118.5 (new peak), success 15.55% last-20 (peak 18.36%@317). Normal pace.","Heartbeat 125 (08:39) - Policy D seed2 at epoch 349/500, reward 118.5, success 16.62% last-20 (peak 19.73%@338). Normal pace.","Heartbeat 126 (09:10) - Policy D seed2 at epoch 369/500, reward 118.5, success 17.65% last-20 (peak 21.09%@352 - just crossed 20%, now the strongest success trajectory of the batch by peak). Normal pace.","Heartbeat 127 (09:42) - Policy D seed2 at epoch 389/500, reward 121.7 (new peak), success 20.66% last-20 (peak 24.22%@387) - now the strongest seed of the entire 9-run batch by success trajectory. 111 epochs left.","Heartbeat 128 (10:09) - Policy D seed2 at epoch 405/500, reward 121.7, success 21.18% last-20 (peak 25.20%@399). 95 epochs left, on pace to finish in ~2-2.5h.","Heartbeat 129 (10:36) - Policy D seed2 at epoch 422/500, reward 121.7, success 23.03% last-20 (peak 26.37%@413). Only 78 epochs left.","Heartbeat 130 (10:57) - Policy D seed2 at epoch 435/500, reward 121.7, success 22.07% last-20 (peak 26.37%@413). Only 65 epochs left.","Heartbeat 131 (11:18) - Policy D seed2 at epoch 447/500, reward 121.7, success 22.43% last-20 (peak 26.37%@413). Only 53 epochs left, imminent finish.","Heartbeat 132 (11:34) - Policy D seed2 at epoch 457/500, reward 121.7, success 22.32% last-20 (peak 26.37%@413). Only 43 epochs left.","Heartbeat 133 (11:50) - Policy D seed2 at epoch 467/500, reward 121.7, success 21.37% last-20 (peak 26.37%@413). Only 33 epochs left.","Heartbeat 134 (12:06) - Policy D seed2 at epoch 477/500, reward 121.7, success 22.66% last-20 (peak 26.76%@478). Only 23 epochs left, imminent finish.","Heartbeat 135 (12:18) - Policy D seed2 at epoch 485/500, reward 121.7, success 23.79% last-20 (peak 26.76%@478). Only 15 epochs left, should finish this cycle.","Heartbeat 136 (12:30) - Policy D seed2 at epoch 492/500, reward 121.7, success 25.04% last-20 (peak 30.86%@487 - best of the whole 9-run batch). Only 8 epochs left.","Heartbeat 137 (12:39) - Policy D seed2 at epoch 498/500, reward 121.7, success 25.03% last-20 (peak 30.86%@487). Only 2 epochs left - should finish within a minute or two.","Heartbeat 138 (12:45) - Policy D seed2 finished cleanly at epoch 500/500 (MAX EPOCHS NUM!, 46375.83s, 25.03% last-20 success, 30.86% peak - best of the batch). Policy D training 100% COMPLETE. Launched nominal evaluation, seed0 running.","Heartbeat 139 (12:56) - Policy D seed0 evaluation done (500 episodes, no errors). Launched seed1 evaluation, seed2 to follow.","Heartbeat 140 (13:12) - Policy D seed1 evaluation done (500 episodes, no errors). Launched seed2 evaluation - the LAST evaluation of the entire 9-run batch.","Heartbeat 141 (13:30) - BATCH COMPLETE. Policy D eval done (9.9% mean, 9.2-10.8% range). All 4 policies (A/B/C/D) fully trained+evaluated+videoed. Combined table, README, experiment_log written. Committed and pushed (ef74b44). Loop stopped."]};
+
+  function fmtTime(ts) {
+    const d = new Date(ts * 1000);
+    return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+  function fmtAgo(ts, now) {
+    const s = Math.max(0, Math.round(now - ts));
+    if (s < 60) return s + "s ago";
+    const m = Math.round(s / 60);
+    if (m < 60) return m + "m ago";
+    const h = Math.floor(m / 60);
+    const rm = m % 60;
+    return h + "h " + rm + "m ago";
+  }
+  function fmtDur(seconds) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.round((seconds % 3600) / 60);
+    if (h > 0) return h + "h " + m + "m";
+    return m + "m";
+  }
+  function fmtBytes(b) { return (b / (1024 * 1024)).toFixed(0) + " MB"; }
+
+  const now = DATA.generated_at;
+  const lastCkptAt = Math.max(...DATA.checkpoints.map(c => c.mtime));
+  const sinceCkpt = now - lastCkptAt;
+
+  document.getElementById("m-task").textContent = DATA.task_id;
+  document.getElementById("m-seed").textContent = DATA.seed;
+  document.getElementById("m-actors").textContent = DATA.num_actors;
+  document.getElementById("m-lr").textContent = DATA.learning_rate;
+  document.getElementById("asof-time").textContent = fmtTime(now);
+  document.getElementById("ckpt-dir").textContent = "run " + DATA.run_dirs[DATA.run_dirs.length - 1];
+  document.getElementById("run-footer").textContent = "force_peg_rl/logs/rl_games/Forge/{" + DATA.run_dirs.join(", ") + "}";
+  document.getElementById("legend-marker-label").textContent = (DATA.process_running ? "current epoch (" : "last epoch (") + DATA.last_epoch + ")";
+  document.getElementById("legend-marker-swatch").style.background = DATA.process_running ? "var(--good)" : "var(--crit)";
+  document.getElementById("reward-panel-note").textContent = "policy " + DATA.active_policy + ", seed " + DATA.seed + " · epoch 1–" + DATA.max_epoch + " target";
+  document.getElementById("fps-panel-note").textContent = "fps total, per epoch, epoch 1–" + DATA.last_epoch;
+  document.getElementById("page-h1").textContent = "Policy " + DATA.active_policy + " training run";
+
+  // batch overview
+  const batchGrid = document.getElementById("batch-grid");
+  DATA.policies.forEach(p => {
+    const card = document.createElement("div");
+    card.className = "batch-card" + (p.key === DATA.active_policy ? " is-active" : "");
+    const pillClass = p.status === "done" ? "good" : p.status === "training" ? "warn" : "queued";
+    const pillText = p.status === "done" ? "Done" : p.status === "training" ? "Training" : "Queued";
+    const metric = p.success != null ? p.success.toFixed(1) + '<span class="unit">%</span>' : (p.status === "training" ? DATA.last_epoch + '<span class="unit">/' + DATA.max_epoch + ' ep</span>' : "&mdash;");
+    card.innerHTML =
+      '<div class="bc-head"><span class="bc-key">' + p.key + '</span><span class="pill ' + pillClass + '" style="padding:3px 9px;font-size:11px;"><span class="dot"></span>' + pillText + '</span></div>' +
+      '<div class="bc-label">' + p.label + '</div>' +
+      '<div class="bc-toggles"><span class="toggle-chip ' + (p.force_obs ? "on" : "off") + '">force obs ' + (p.force_obs ? "on" : "off") + '</span><span class="toggle-chip ' + (p.force_penalty ? "on" : "off") + '">penalty ' + (p.force_penalty ? "on" : "off") + '</span></div>' +
+      '<div class="bc-metric">' + metric + '</div>' +
+      '<div class="bc-note">' + p.note + (p.success_range ? " · range " + p.success_range + "%" : "") + '</div>';
+    batchGrid.appendChild(card);
+  });
+
+  // seeds table
+  const pctFmt = function (v) { return v == null ? "—" : (v * 100).toFixed(2) + "%"; };
+  const seedsBody = document.getElementById("seeds-body");
+  (DATA.seeds || []).forEach(function (s) {
+    const tr = document.createElement("tr");
+    const cells = [
+      [s.seed, false],
+      [s.status, false],
+      [s.epochs == null ? "—" : s.epochs + " / " + DATA.max_epoch, false],
+      [pctFmt(s.success_recent), true],
+      [s.peak_success == null ? "—" : pctFmt(s.peak_success) + " @ ep " + s.peak_epoch, true],
+    ];
+    cells.forEach(function (c, i) {
+      const td = document.createElement("td");
+      td.textContent = c[0];
+      if (i === 0 || c[1]) td.className = "num";
+      if (s.seed === DATA.seed) td.style.fontWeight = "600";
+      tr.appendChild(td);
+    });
+    seedsBody.appendChild(tr);
+  });
+
+  const statusPill = document.getElementById("status-pill");
+  const statusText = document.getElementById("status-text");
+  const stalledNoProcess = !DATA.process_running && sinceCkpt > 40 * 60;
+  if (DATA.last_epoch >= DATA.max_epoch && DATA.seed === 2) {
+    statusPill.className = "pill good";
+    statusText.textContent = "Policy " + DATA.active_policy + " complete";
+  } else if (stalledNoProcess) {
+    statusPill.className = "pill crit";
+    statusText.textContent = "Stalled — no checkpoint in " + fmtDur(sinceCkpt);
+  } else if (DATA.process_running) {
+    statusPill.className = "pill warn";
+    statusText.textContent = "Training — seed " + DATA.seed + " of 3";
+  } else {
+    statusPill.className = "pill warn";
+    statusText.textContent = "Process not detected";
+  }
+
+  const pct = Math.round((DATA.last_epoch / DATA.max_epoch) * 100);
+  document.getElementById("k-progress").textContent = DATA.last_epoch + " / " + DATA.max_epoch;
+  document.getElementById("k-progress-fill").style.width = pct + "%";
+  document.getElementById("k-progress-sub").textContent = pct + "% of seed " + DATA.seed + " · " + (2 - DATA.seed) + " seed(s) still queued after this one";
+
+  document.getElementById("k-reward").textContent = DATA.best_reward.toFixed(1);
+  document.getElementById("k-reward-sub").textContent = "at epoch " + DATA.best_reward_epoch;
+
+  const avgFps = Math.round(DATA.fps_series.reduce((a, e) => a + e.fps, 0) / DATA.fps_series.length);
+  const recentFps = DATA.fps_series.slice(-30);
+  const avgRecentFps = Math.round(recentFps.reduce((a, e) => a + e.fps, 0) / recentFps.length);
+  document.getElementById("k-fps").textContent = avgFps;
+  document.getElementById("k-fps-sub").textContent = "recent 30-epoch avg " + avgRecentFps + " fps";
+
+  // ETA estimate from recent checkpoint cadence
+  const ckptsSorted = DATA.checkpoints.slice().sort((a, b) => a.mtime - b.mtime);
+  let secPerEpoch = null;
+  if (ckptsSorted.length >= 2) {
+    const first = ckptsSorted[0], last = ckptsSorted[ckptsSorted.length - 1];
+    const mFirst = first.label.match(/ep_(\d+)/), mLast = last.label.match(/ep_(\d+)/);
+    if (mFirst && mLast && mLast[1] !== mFirst[1]) {
+      secPerEpoch = (last.mtime - first.mtime) / (parseInt(mLast[1]) - parseInt(mFirst[1]));
+    }
+  }
+  if (secPerEpoch) {
+    const epochsLeftThisSeed = DATA.max_epoch - DATA.last_epoch;
+    const seedsLeft = 2 - DATA.seed;
+    const totalEpochsLeft = epochsLeftThisSeed + seedsLeft * DATA.max_epoch;
+    document.getElementById("k-eta").textContent = fmtDur(totalEpochsLeft * secPerEpoch);
+    document.getElementById("k-eta-sub").textContent = "~" + fmtDur(secPerEpoch * 100) + "/100 epochs · seed " + DATA.seed + " done in ~" + fmtDur(epochsLeftThisSeed * secPerEpoch);
+  } else {
+    document.getElementById("k-eta").textContent = "—";
+    document.getElementById("k-eta-sub").textContent = "not enough checkpoint history yet";
+  }
+
+  // success-rate diagnostic: adapts its framing to what the data actually shows,
+  // rather than a hardcoded claim that would go stale as later seeds/epochs land.
+  (function () {
+    const done = (DATA.seeds || []).filter(s => s.success_recent != null);
+    const el = document.getElementById("diag-success-text");
+    const icon = document.getElementById("diag-success-icon");
+    if (!done.length) {
+      icon.className = "diag-icon unk";
+      icon.textContent = "?";
+      el.innerHTML = "<b>No success-rate data yet</b> — <span class=\"muted\">Episode/Metrics/success_rate hasn't logged a nonzero window for the active seed yet.</span>";
+      return;
+    }
+    const worst = done.reduce((a, b) => (a.peak_success ?? 0) < (b.peak_success ?? 0) ? a : b);
+    const allNearZero = done.every(s => (s.peak_success ?? 0) < 0.01);
+    if (allNearZero) {
+      icon.className = "diag-icon crit";
+      icon.textContent = "!";
+      el.innerHTML = "<b>Policy C's training-time success rate is essentially zero, not just lower than Policy B's</b> — " +
+        "<span class=\"muted\">seed " + worst.seed + "'s <code>Episode/Metrics/success_rate</code> peaked at only " +
+        (worst.peak_success * 100).toFixed(2) + "% (epoch " + worst.peak_epoch + ") and sits at " +
+        (worst.success_recent * 100).toFixed(2) + "% now — read directly from the TensorBoard event file, not inferred from reward. " +
+        "Policy B's seed 0 reached 30%+ over the same horizon. The reward curve alone (still climbing, ~51 best-so-far) undersold how stark this gap is: " +
+        "whatever reward Policy C is finding, it isn't coming from successful insertions. Strong early evidence for the \"fights blind\" side of this ablation's question — " +
+        "one seed so far, and training success rate is a different measurement from deterministic nominal-suite eval, but the direction is unambiguous.</span>";
+    } else {
+      icon.className = "diag-icon warn";
+      icon.textContent = "!";
+      el.innerHTML = "<b>Policy C's training-time success rate is climbing</b> — " +
+        "<span class=\"muted\">peak so far " + (worst.peak_success * 100).toFixed(2) + "% (seed " + worst.seed + ", epoch " + worst.peak_epoch + "). " +
+        "Still worth comparing against Policy B's trajectory once more seeds land.</span>";
+    }
+  })();
+
+  const activeSeedRow = (DATA.seeds || []).find(s => s.seed === DATA.seed);
+  document.getElementById("k-success").textContent = activeSeedRow && activeSeedRow.success_recent != null ? (activeSeedRow.success_recent * 100).toFixed(2) + "%" : "—";
+  document.getElementById("k-success-sub").textContent = activeSeedRow && activeSeedRow.peak_success != null
+    ? "mean of last 20 epochs · peak " + (activeSeedRow.peak_success * 100).toFixed(2) + "% @ ep " + activeSeedRow.peak_epoch
+    : "mean of last 20 epochs";
+
+  document.getElementById("diag-contention-text").textContent =
+    "recent cadence is roughly " + (secPerEpoch ? fmtDur(secPerEpoch * 100) : "?") + " per 100 epochs on this shared box — " +
+    "well above the ~140s/100-epoch tuned baseline measured for Policy A with an idle GPU, consistent with another process " +
+    "sharing the GPU (same pattern documented for Policy A/B's runs).";
+
+  // checkpoints table
+  const ckptBody = document.getElementById("ckpt-body");
+  DATA.checkpoints.slice().sort((a, b) => b.mtime - a.mtime).forEach(c => {
+    const m = c.label.match(/ep_(\d+)_rew_-?([\d.]+)/);
+    const epochLabel = m ? m[1] : (c.label === "Forge" ? DATA.best_reward_epoch : "—");
+    const rewardLabel = m ? parseFloat(m[2]).toFixed(2) : (c.label === "Forge" ? DATA.best_reward.toFixed(2) : "—");
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      '<td><span class="file-tag">' + c.label + " (" + c.run + ')</span></td>' +
+      '<td class="num">' + epochLabel + '</td>' +
+      '<td class="num">' + rewardLabel + '</td>' +
+      '<td class="num">' + fmtBytes(c.bytes) + '</td>' +
+      '<td class="num">' + fmtAgo(c.mtime, now) + '</td>';
+    ckptBody.appendChild(tr);
+  });
+
+  // heartbeat log
+  const hbList = document.getElementById("heartbeat-list");
+  DATA.heartbeats.slice().reverse().forEach(hb => {
+    const row = document.createElement("div");
+    row.className = "hb-row";
+    row.innerHTML = '<div class="hb-time">' + fmtTime(hb.ts) + '</div><div class="hb-text">' + hb.text + '</div>';
+    hbList.appendChild(row);
+  });
+
+  // ---- reward chart ----
+  (function () {
+    const svg = document.getElementById("reward-chart");
+    const W = 960, H = 300;
+    const M = { l: 40, r: 16, t: 16, b: 30 };
+    const plotW = W - M.l - M.r, plotH = H - M.t - M.b;
+    const xMax = DATA.max_epoch;
+    const yMax = Math.max(20, Math.ceil((DATA.best_reward + 20) / 20) * 20);
+    const x = e => M.l + (e / xMax) * plotW;
+    const y = r => M.t + plotH - (r / yMax) * plotH;
+    const ns = "http://www.w3.org/2000/svg";
+    function el(tag, attrs) { const n = document.createElementNS(ns, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); return n; }
+
+    const ySteps = 4;
+    for (let i = 0; i <= ySteps; i++) {
+      const val = (yMax / ySteps) * i;
+      const gy = y(val);
+      svg.appendChild(el("line", { class: "gridline", x1: M.l, x2: W - M.r, y1: gy, y2: gy }));
+      const t = el("text", { class: "axis-label", x: 6, y: gy + 3 });
+      t.textContent = Math.round(val);
+      svg.appendChild(t);
+    }
+    [0, 100, 200, 300, 400, 500].forEach(ep => {
+      const gx = x(ep);
+      const t = el("text", { class: "axis-label", x: gx, y: H - 8, "text-anchor": "middle" });
+      t.textContent = ep;
+      svg.appendChild(t);
+    });
+
+    const series = DATA.reward_series;
+    const pts = series.map(p => [x(p.epoch), y(p.reward)]);
+    let areaD = "M " + M.l + " " + y(0) + " ";
+    pts.forEach(p => areaD += "L " + p[0] + " " + p[1] + " ");
+    areaD += "L " + pts[pts.length - 1][0] + " " + y(0) + " Z";
+    svg.appendChild(el("path", { class: "area-fill", d: areaD }));
+    let lineD = "M " + pts.map(p => p.join(" ")).join(" L ");
+    svg.appendChild(el("path", { class: "series-line", d: lineD }));
+
+    const lastX = x(DATA.last_epoch);
+    svg.appendChild(el("line", { class: "stall-line", x1: lastX, x2: lastX, y1: M.t, y2: M.t + plotH }));
+    const stallLabel = el("text", { class: "stall-label", x: lastX + 6, y: M.t + 12 });
+    stallLabel.textContent = "epoch " + DATA.last_epoch + " (last)";
+    svg.appendChild(stallLabel);
+
+    const last = pts[pts.length - 1];
+    svg.appendChild(el("circle", { class: "endpoint", cx: last[0], cy: last[1], r: 5 }));
+
+    const crosshair = el("line", { class: "hover-crosshair", x1: 0, x2: 0, y1: M.t, y2: M.t + plotH });
+    const hoverDot = el("circle", { class: "hover-dot", r: 5 });
+    svg.appendChild(crosshair);
+    svg.appendChild(hoverDot);
+
+    const tooltip = document.getElementById("reward-tooltip");
+    const wrap = document.getElementById("reward-chart-wrap");
+    const hitRect = el("rect", { x: M.l, y: M.t, width: plotW, height: plotH, fill: "transparent" });
+    hitRect.style.cursor = "crosshair";
+    svg.appendChild(hitRect);
+
+    function nearest(mx) {
+      let best = 0, bestD = Infinity;
+      pts.forEach((p, i) => { const d = Math.abs(p[0] - mx); if (d < bestD) { bestD = d; best = i; } });
+      return best;
+    }
+    hitRect.addEventListener("mousemove", ev => {
+      const rect = svg.getBoundingClientRect();
+      const mx = ((ev.clientX - rect.left) / rect.width) * W;
+      const idx = nearest(mx);
+      const p = pts[idx], d = series[idx];
+      crosshair.setAttribute("x1", p[0]); crosshair.setAttribute("x2", p[0]); crosshair.style.opacity = 1;
+      hoverDot.setAttribute("cx", p[0]); hoverDot.setAttribute("cy", p[1]); hoverDot.style.opacity = 1;
+      const wrapRect = wrap.getBoundingClientRect();
+      tooltip.style.left = ((p[0] / W) * wrapRect.width) + "px";
+      tooltip.style.top = ((p[1] / H) * wrapRect.height) + "px";
+      tooltip.style.opacity = 1;
+      tooltip.innerHTML = "<strong>epoch " + d.epoch + "</strong><br>reward " + d.reward.toFixed(2);
+    });
+    hitRect.addEventListener("mouseleave", () => { crosshair.style.opacity = 0; hoverDot.style.opacity = 0; tooltip.style.opacity = 0; });
+  })();
+
+  // ---- fps chart ----
+  (function () {
+    const svg = document.getElementById("fps-chart");
+    const W = 960, H = 140;
+    const M = { l: 40, r: 16, t: 10, b: 24 };
+    const plotW = W - M.l - M.r, plotH = H - M.t - M.b;
+    const series = DATA.fps_series;
+    const xMin = series[0].epoch, xMax = series[series.length - 1].epoch;
+    const vals = series.map(e => e.fps);
+    const yMin = Math.floor(Math.min(...vals) / 50) * 50 - 25;
+    const yMax = Math.ceil(Math.max(...vals) / 50) * 50 + 25;
+    const x = e => M.l + ((e - xMin) / (xMax - xMin)) * plotW;
+    const y = v => M.t + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+    const ns = "http://www.w3.org/2000/svg";
+    function el(tag, attrs) { const n = document.createElementNS(ns, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); return n; }
+
+    [yMin, (yMin + yMax) / 2, yMax].forEach(v => {
+      const gy = y(v);
+      svg.appendChild(el("line", { class: "gridline", x1: M.l, x2: W - M.r, y1: gy, y2: gy }));
+      const t = el("text", { class: "axis-label", x: 6, y: gy + 3 });
+      t.textContent = Math.round(v);
+      svg.appendChild(t);
+    });
+    [xMin, Math.round(xMax * .2), Math.round(xMax * .4), Math.round(xMax * .6), Math.round(xMax * .8), xMax].forEach(ep => {
+      if (ep < xMin || ep > xMax) return;
+      const gx = x(ep);
+      const t = el("text", { class: "axis-label", x: gx, y: H - 6, "text-anchor": "middle" });
+      t.textContent = ep;
+      svg.appendChild(t);
+    });
+
+    const pts = series.map(p => [x(p.epoch), y(p.fps)]);
+    let areaD = "M " + pts[0][0] + " " + y(yMin) + " ";
+    pts.forEach(p => areaD += "L " + p[0] + " " + p[1] + " ");
+    areaD += "L " + pts[pts.length - 1][0] + " " + y(yMin) + " Z";
+    svg.appendChild(el("path", { class: "fps-fill", d: areaD }));
+    let lineD = "M " + pts.map(p => p.join(" ")).join(" L ");
+    svg.appendChild(el("path", { class: "fps-line", d: lineD }));
+
+    const crosshair = el("line", { class: "hover-crosshair", x1: 0, x2: 0, y1: M.t, y2: M.t + plotH });
+    const hoverDot = el("circle", { class: "hover-dot fps", r: 4 });
+    svg.appendChild(crosshair);
+    svg.appendChild(hoverDot);
+
+    const tooltip = document.getElementById("fps-tooltip");
+    const wrap = document.getElementById("fps-chart-wrap");
+    const hitRect = el("rect", { x: M.l, y: M.t, width: plotW, height: plotH, fill: "transparent" });
+    hitRect.style.cursor = "crosshair";
+    svg.appendChild(hitRect);
+
+    function nearest(mx) {
+      let best = 0, bestD = Infinity;
+      pts.forEach((p, i) => { const d = Math.abs(p[0] - mx); if (d < bestD) { bestD = d; best = i; } });
+      return best;
+    }
+    hitRect.addEventListener("mousemove", ev => {
+      const rect = svg.getBoundingClientRect();
+      const mx = ((ev.clientX - rect.left) / rect.width) * W;
+      const idx = nearest(mx);
+      const p = pts[idx], d = series[idx];
+      crosshair.setAttribute("x1", p[0]); crosshair.setAttribute("x2", p[0]); crosshair.style.opacity = 1;
+      hoverDot.setAttribute("cx", p[0]); hoverDot.setAttribute("cy", p[1]); hoverDot.style.opacity = 1;
+      const wrapRect = wrap.getBoundingClientRect();
+      tooltip.style.left = ((p[0] / W) * wrapRect.width) + "px";
+      tooltip.style.top = ((p[1] / H) * wrapRect.height) + "px";
+      tooltip.style.opacity = 1;
+      tooltip.innerHTML = "<strong>epoch " + d.epoch + "</strong><br>" + d.fps + " fps";
+    });
+    hitRect.addEventListener("mouseleave", () => { crosshair.style.opacity = 0; hoverDot.style.opacity = 0; tooltip.style.opacity = 0; });
+  })();
+</script>
